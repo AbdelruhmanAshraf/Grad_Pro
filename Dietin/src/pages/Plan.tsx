@@ -51,8 +51,7 @@ const fullBodyImg = shouldersImg;
 import exerciseData from '@/data/exercises.json';
 
 // Add Gemini AI import and initialization
-import { GoogleGenerativeAI } from "@google/generative-ai";
-import { genAI } from "@/lib/gemini";
+import { generateText } from "@/lib/gemini";
 
 interface Exercise {
   id: string;
@@ -1045,8 +1044,6 @@ const Plan = () => {
   // Update the generateWorkoutInsights function to use Gemini AI
   const generateWorkoutInsights = async (currentWorkout: ExerciseProgress[], history: WorkoutHistory[]) => {
     try {
-      const model = genAI.getGenerativeModel({ model: "gemini-2.0-flash" });
-
       // Prepare workout data for AI analysis
       const workoutData = {
         currentWorkout: currentWorkout.map(exercise => ({
@@ -1078,8 +1075,8 @@ const Plan = () => {
 
       Provide a single paragraph insight (max 2-3 sentences) that highlights key achievements and areas for focus. Keep it motivational and specific to their performance metrics.`;
 
-      const result = await model.generateContent(prompt);
-      return result.response.text().trim();
+      const text = await generateText({ prompt });
+      return text.trim();
     } catch (error) {
       console.error('Error generating AI insights:', error);
       return "Great work on completing your workout! Keep pushing yourself and maintaining consistency for optimal results.";
@@ -2174,29 +2171,7 @@ const Plan = () => {
                                   {exercise.weightUnit.toUpperCase()}
                                 </span>
                               </button>
-                              {isAiConfigured() && (
-                                <button
-                                  onClick={(e) => {
-                                    e.stopPropagation();
-                                    setAICoachByExercise((prev) => ({
-                                      ...prev,
-                                      [exerciseIndex]: !prev[exerciseIndex],
-                                    }));
-                                  }}
-                                  className={cn(
-                                    "px-3 py-1.5 rounded-lg transition-colors flex items-center justify-center gap-1.5",
-                                    aiCoachByExercise[exerciseIndex]
-                                      ? "bg-primary text-white"
-                                      : "bg-primary/10 text-primary hover:bg-primary/20",
-                                  )}
-                                  title={t('aiCoach.toggle', { defaultValue: 'AI Mode' })}
-                                >
-                                  <Sparkles className="w-4 h-4" />
-                                  <span className="text-sm font-medium">
-                                    {t('aiCoach.toggle', { defaultValue: 'AI Mode' })}
-                                  </span>
-                                </button>
-                              )}
+
                             </div>
                             <p className="text-gray-600 text-sm">
                               {exercise.sets.filter(s => s.isCompleted).length}/{exercise.sets.length} sets completed

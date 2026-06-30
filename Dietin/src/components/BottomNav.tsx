@@ -1,11 +1,10 @@
 import { cn } from "@/lib/utils";
 import { Link, useLocation, useNavigate } from "react-router-dom";
-import { Home, ClipboardList, LineChart, Dumbbell, User, Plus, LucideIcon } from 'lucide-react';
+import { Home, ClipboardList, LineChart, Dumbbell, User, Plus, Utensils, LucideIcon } from 'lucide-react';
 import { useUserStore } from "@/stores/userStore";
 import { routes } from "@/lib/routes";
 import { useState, useEffect, useRef } from "react";
 import MealAnalysis from "./MealAnalysis";
-import PlusButton from "./PlusButton";
 import NavHide from "./NavHide";
 import { useTranslation } from 'react-i18next';
 
@@ -27,9 +26,7 @@ export function BottomNav({ className, activePath, ...props }: BottomNavProps) {
   const [lastTrackerPath, setLastTrackerPath] = useState("/diet");
   const navigate = useNavigate();
   const { user } = useUserStore();
-  const [isPlusButtonOpen, setIsPlusButtonOpen] = useState(false);
   const [isMealAnalysisOpen, setIsMealAnalysisOpen] = useState(false);
-  const [isCustomPlanOpen, setIsCustomPlanOpen] = useState(false);
   const navRef = useRef<HTMLDivElement | null>(null);
 
   useEffect(() => {
@@ -86,9 +83,9 @@ export function BottomNav({ className, activePath, ...props }: BottomNavProps) {
     { name: "workouts", icon: Dumbbell, path: "/plan" },
     { 
       name: "add", 
-      icon: Plus, 
+      icon: Utensils, 
       path: "#", 
-      onClick: () => setIsPlusButtonOpen(true)
+      onClick: () => setIsMealAnalysisOpen(true)
     },
     { name: "tracker", icon: LineChart, path: lastTrackerPath },
     { 
@@ -133,14 +130,7 @@ export function BottomNav({ className, activePath, ...props }: BottomNavProps) {
         </div>
       </nav>
 
-      <NavHide isAIOpen={isPlusButtonOpen || isMealAnalysisOpen} />
-
-      <PlusButton 
-        isOpen={isPlusButtonOpen}
-        onClose={() => setIsPlusButtonOpen(false)}
-        setIsMealAnalysisOpen={setIsMealAnalysisOpen}
-        setIsCustomPlanOpen={setIsCustomPlanOpen}
-      />
+      <NavHide isAIOpen={isMealAnalysisOpen} />
 
       <MealAnalysis 
         isOpen={isMealAnalysisOpen} 

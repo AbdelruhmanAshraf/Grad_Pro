@@ -1,6 +1,5 @@
 import { useState, useEffect } from 'react';
-import { GoogleGenerativeAI } from "@google/generative-ai";
-import { genAI } from "@/lib/gemini";
+import { generateJSON } from "@/lib/gemini";
 
 interface NameValidationAIProps {
   name: string;
@@ -39,8 +38,6 @@ const NameValidationAI = ({ name, onValidation }: NameValidationAIProps) => {
 
       setIsValidating(true);
       try {
-        const model = genAI.getGenerativeModel({ model: "gemini-2.0-flash" });
-        
         const prompt = `You are a name validation assistant. Analyze if this input "${name}" is formatted as a proper person's name.
         Rules:
         1. Must ONLY contain name(s), no sentences or phrases
@@ -55,19 +52,14 @@ const NameValidationAI = ({ name, onValidation }: NameValidationAIProps) => {
           "message": string (only if invalid, explaining why, max 50 chars)
         }`;
 
-        const result = await model.generateContent(prompt);
-        const response = await result.response;
-        const text = response.text();
-        
-        const cleanJson = text.replace(/```json\n|\n```|```/g, '').trim();
-        const validation = JSON.parse(cleanJson);
-        
-        if (!validation.isValid) {
-          setError(validation.message);
+        const validation = await generateJSON<{ isValid: boolean; message?: string }>({ prompt });
+
+        if (!validation?.isValid) {
+          setError(validation?.message ?? "Invalid name");
         } else {
           setError(null);
         }
-        onValidation(validation.isValid);
+        onValidation(Boolean(validation?.isValid));
       } catch (error) {
         console.error('Error validating name:', error);
         setError(null);

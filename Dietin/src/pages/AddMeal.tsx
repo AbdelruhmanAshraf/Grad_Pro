@@ -1,17 +1,15 @@
-import { motion, AnimatePresence, PanInfo, useMotionValue, useTransform } from "framer-motion";
+import { motion, AnimatePresence } from "framer-motion";
 import { useState, useEffect, useRef } from "react";
-import NavHide from "./NavHide";
+import NavHide from "../components/NavHide";
 import { cn } from "@/lib/utils";
 import { Camera, Pencil, Search, Sparkles, X, Plus, Tag, ChevronLeft, Loader2, BarChart3, Utensils, Flame, Lock } from "lucide-react";
 import { useUserStore } from "@/stores/userStore";
-import { GoogleGenerativeAI } from "@google/generative-ai";
-import { genAI, analyzeNutrition } from "@/lib/gemini";
+import { analyzeNutrition, generateJSON, generateText } from "@/lib/gemini";
 import { db } from "@/lib/firebase";
 import { doc, getDoc, increment } from "firebase/firestore";
 import { auth } from "@/lib/firebase";
-import ProSubscriptionPanel from "./ProSubscriptionPanel";
-import MealAnalysisAnimate from "./MealAnalysisAnimate";
-import ImproveAI from "./ImproveAI";
+import ProSubscriptionPanel from "../components/ProSubscriptionPanel";
+import ImproveAI from "../components/ImproveAI";
 import { useTranslation } from "react-i18next";
 
 // Modern font styles
@@ -46,28 +44,16 @@ interface AnalysisResult {
   error?: string;
 }
 
-interface MealAnalysisProps {
-  isOpen: boolean;
-  onClose: () => void;
-  setIsSearchOpen: (open: boolean) => void;
-  editEntry?: {
-    description: string;
-    foodName: string;
-    calories: number;
-    protein: number;
-    carbs: number;
-    fat: number;
-    mealTag: string;
-    timestamp: string;
-    healthScore: number;
-  };
-}
 
-const MealAnalysis = ({ isOpen, onClose, setIsSearchOpen, editEntry }: MealAnalysisProps) => {
-  const y = useMotionValue(0);
-  const opacity = useTransform(y, [0, 300], [1, 0]);
+import { useNavigate, useLocation } from 'react-router-dom';
+
+const AddMeal = () => {
+  const navigate = useNavigate();
+  const location = useLocation();
+  const editEntry = location.state?.editEntry;
+  const setIsSearchOpen = (open: boolean) => { if(open) navigate('/diet', { state: { openSearch: true } }); };
+  const onClose = () => navigate(-1);
   const { t, i18n } = useTranslation();
-  const [isDragging, setIsDragging] = useState(false);
   const [isManualEntry, setIsManualEntry] = useState(!!editEntry);
   const [isAIDescription, setIsAIDescription] = useState(false);
   const [isSnapPhoto, setIsSnapPhoto] = useState(false);
@@ -131,29 +117,6 @@ const MealAnalysis = ({ isOpen, onClose, setIsSearchOpen, editEntry }: MealAnaly
     t('mealAnalysis.tags.meal3')
   ];
 
-  // Prevent scrolling on the main page when popup is open
-  useEffect(() => {
-    if (isOpen) {
-      document.body.style.overflow = 'hidden';
-      document.body.style.position = 'fixed';
-      document.body.style.width = '100%';
-      document.body.style.touchAction = 'none';
-      // Hide nav when opening
-      document.dispatchEvent(new CustomEvent('setNavHide', { detail: { isHidden: true } }));
-    } else {
-      document.body.style.overflow = '';
-      document.body.style.position = '';
-      document.body.style.width = '';
-      document.body.style.touchAction = '';
-    }
-
-    return () => {
-      document.body.style.overflow = '';
-      document.body.style.position = '';
-      document.body.style.width = '';
-      document.body.style.touchAction = '';
-    };
-  }, [isOpen]);
 
   // Update form when editEntry changes
   useEffect(() => {
@@ -168,14 +131,6 @@ const MealAnalysis = ({ isOpen, onClose, setIsSearchOpen, editEntry }: MealAnaly
     }
   }, [editEntry]);
 
-  const handleDragEnd = (event: MouseEvent | TouchEvent | PointerEvent, info: PanInfo) => {
-    if (info.offset.y > 100) {
-      onClose();
-    } else {
-      y.set(0);
-    }
-    setIsDragging(false);
-  };
 
   const handleSearchClick = () => {
     onClose(); // Close MealAnalysis popup
@@ -400,9 +355,6 @@ const MealAnalysis = ({ isOpen, onClose, setIsSearchOpen, editEntry }: MealAnaly
         incrementMealAnalysis();
       }
 
-      const modelName = import.meta.env.VITE_GEMINI_MODEL_FOOD || "gemini-2.5-pro";
-      const model = genAI.getGenerativeModel({ model: modelName });
-
       // Convert image to base64
       const reader = new FileReader();
       reader.onload = async () => {
@@ -440,29 +392,12 @@ const MealAnalysis = ({ isOpen, onClose, setIsSearchOpen, editEntry }: MealAnaly
           IMPORTANT: Use ${promptLanguage} for all string fields (like title, suggestions, and ingredients). Numbers stay as numbers.
           ONLY return the JSON, no other text.`;
 
-          const result = await model.generateContent({
-            contents: [{
-              role: "user",
-              parts: [
-                { text: prompt },
-                { inlineData: { data: base64Image, mimeType: file.type } }
-              ]
-            }]
+          const analysis = await generateJSON<any>({
+            prompt,
+            image: { data: base64Image || "", mimeType: file.type },
+            model: import.meta.env.VITE_GEMINI_MODEL_FOOD || 'gemini-2.5-pro'
           });
-          const response = await result.response;
-          const text = response.text();
 
-          console.log('Raw photo analysis response:', text);
-
-          // Clean the response - extract only the JSON part
-          let cleanedText = text;
-          if (text.includes("```")) {
-            cleanedText = text.replace(/```(?:json)?\n([\s\S]*?)```/g, "$1").trim();
-          }
-
-          console.log('Cleaned photo analysis text:', cleanedText);
-
-          const analysis = JSON.parse(cleanedText);
           console.log('Parsed photo analysis data:', analysis);
 
           // Comprehensive validation of the analysis data
@@ -588,9 +523,6 @@ const MealAnalysis = ({ isOpen, onClose, setIsSearchOpen, editEntry }: MealAnaly
 
   const generateRecommendations = async (food: any) => {
     try {
-      const modelName = import.meta.env.VITE_GEMINI_MODEL_FOOD || "gemini-2.5-pro";
-      const model = genAI.getGenerativeModel({ model: modelName });
-
       const prompt = `Analyze this meal and provide recommendations for improvement:
       Food: ${food.description}
       Calories: ${food.calories}
@@ -613,12 +545,8 @@ const MealAnalysis = ({ isOpen, onClose, setIsSearchOpen, editEntry }: MealAnaly
         }
       }`;
 
-      const result = await model.generateContent(prompt);
-      const response = await result.response;
-      const text = response.text();
-
       try {
-        const recommendations = JSON.parse(text);
+        const recommendations = await generateJSON<any>({ prompt });
         setRecommendations(recommendations);
       } catch (error) {
         console.error('Failed to parse recommendations:', error);
@@ -907,8 +835,6 @@ const MealAnalysis = ({ isOpen, onClose, setIsSearchOpen, editEntry }: MealAnaly
         incrementMealAnalysis();
       }
 
-      const modelName = import.meta.env.VITE_GEMINI_MODEL_FOOD || "gemini-2.5-pro";
-      const model = genAI.getGenerativeModel({ model: modelName });
       const promptLanguage = i18n.language?.startsWith('ar') ? 'Arabic' : 'English';
 
       const prompt = `Analyze this meal description and provide detailed nutritional information.
@@ -955,24 +881,18 @@ const MealAnalysis = ({ isOpen, onClose, setIsSearchOpen, editEntry }: MealAnaly
       }
       IMPORTANT: Use ${promptLanguage} for all string fields (like title, suggestions, and ingredients). Numbers stay as numbers. Return ONLY raw JSON.`;
 
-      const result = await model.generateContent(prompt);
-      const response = await result.response;
-      const text = response.text();
-
-      console.log('Raw AI response:', text);
+      let analysisData: any;
+      try {
+        analysisData = await generateJSON<any>({ 
+          prompt,
+          model: import.meta.env.VITE_GEMINI_MODEL_FOOD || 'gemini-2.5-pro'
+        });
+      } catch (err) {
+        console.error('Gemini JSON error', err);
+        throw err;
+      }
 
       try {
-        // Clean the response text to handle markdown code blocks
-        let cleanedText = text;
-
-        // Remove markdown code blocks if present
-        if (text.includes("```")) {
-          cleanedText = text.replace(/```(?:json)?\n([\s\S]*?)```/g, "$1").trim();
-        }
-
-        console.log('Cleaned response text:', cleanedText);
-
-        const analysisData = JSON.parse(cleanedText);
         console.log('Parsed analysis data:', analysisData);
 
         // Validate the analysis data structure
@@ -1011,10 +931,9 @@ const MealAnalysis = ({ isOpen, onClose, setIsSearchOpen, editEntry }: MealAnaly
         setAnalysisResult(analysisData);
       } catch (parseError) {
         console.error("Failed to parse AI response:", parseError);
-        console.log("Raw response:", text);
         setAnalysisResult({
           isFood: false,
-          error: "Failed to analyze the meal. The AI response was not in the expected format."
+          error: parseError instanceof Error ? parseError.message : "Failed to analyze the meal. The AI response was not in the expected format."
         } as AnalysisResult);
       }
     } catch (error: any) {
@@ -1067,9 +986,6 @@ const MealAnalysis = ({ isOpen, onClose, setIsSearchOpen, editEntry }: MealAnaly
 
   const handleImprove = async (improveText: string) => {
     try {
-      const modelName = import.meta.env.VITE_GEMINI_MODEL_FOOD || "gemini-2.5-pro";
-      const model = genAI.getGenerativeModel({ model: modelName });
-
       const prompt = `Analyze this meal with the following improvement request and provide updated nutritional information.
       
       Original Meal Analysis:
@@ -1115,24 +1031,15 @@ const MealAnalysis = ({ isOpen, onClose, setIsSearchOpen, editEntry }: MealAnaly
         "ingredients": ["detected ingredients"]
       }`;
 
-      const result = await model.generateContent(prompt);
-      const response = await result.response;
-      const text = response.text();
-
-      console.log('Raw AI improvement response:', text);
+      let improvedAnalysis: any;
+      try {
+        improvedAnalysis = await generateJSON<any>({ prompt });
+      } catch (err) {
+        console.error('Gemini improvement JSON error', err);
+        throw err;
+      }
 
       try {
-        // Clean the response text to handle markdown code blocks
-        let cleanedText = text;
-
-        // Remove markdown code blocks if present
-        if (text.includes("```")) {
-          cleanedText = text.replace(/```(?:json)?\n([\s\S]*?)```/g, "$1").trim();
-        }
-
-        console.log('Cleaned improvement response:', cleanedText);
-
-        const improvedAnalysis = JSON.parse(cleanedText);
         console.log('Parsed improvement data:', improvedAnalysis);
 
         // Validate the analysis data structure
@@ -1179,32 +1086,24 @@ const MealAnalysis = ({ isOpen, onClose, setIsSearchOpen, editEntry }: MealAnaly
   };
 
   return (
-    <>
-      <MealAnalysisAnimate isOpen={isOpen} onClose={handleClose}>
-        <motion.div
-          className="bg-[#f5f5f7] dark:bg-[#1c1c1e] rounded-t-[20px] overflow-hidden shadow-2xl mx-auto max-w-[420px] relative flex flex-col"
-          animate={{
-            height: isManualEntry || isAIDescription || isSnapPhoto
-              ? isAIDescription
-                ? isAnalyzing || analysisResult
-                  ? "78vh"
-                  : "44vh"
-                : isSnapPhoto
-                  ? isPhotoAnalyzing || photoAnalysisResult
-                    ? "78vh"
-                    : "40vh"
-                  : "65vh"
-              : "30vh"
-          }}
-          transition={{
-            duration: 0.6,
-            ease: [0.23, 1, 0.32, 1]
-          }}
-        >
-          <div className="pt-3 pb-2 flex justify-center flex-shrink-0">
-            <div className="w-10 h-1 bg-black/10 dark:bg-white/20 rounded-full" />
+    <div className="h-full bg-[#f5f5f7] dark:bg-[#1c1c1e]">
+      <NavHide isAIOpen={true} />
+      <div className="h-full overflow-y-auto -webkit-overflow-scrolling-touch pb-20">
+        <div className="container mx-auto max-w-2xl space-y-6 p-6">
+          <div className="flex items-center justify-between mb-2">
+            <button
+              onClick={handleBackClick}
+              className="p-2 -ml-2 rounded-full hover:bg-black/5 dark:hover:bg-white/10 transition-colors"
+            >
+              <ChevronLeft className="w-6 h-6 text-[#1d1d1f] dark:text-white/90" />
+            </button>
+            <h1 className="text-[1.75rem] tracking-tight text-black dark:text-white font-sf-display font-sf-bold">
+              {t('diet.actions.addFood')}
+            </h1>
+            <div className="w-10" /> {/* Spacer for centering */}
           </div>
-
+          
+          <div className="bg-white dark:bg-[#1c1c1e] rounded-3xl overflow-hidden shadow-sm border border-gray-100 dark:border-white/10 relative flex flex-col min-h-[60vh] max-h-none">
           <AnimatePresence mode="wait">
             {!isManualEntry && !isAIDescription && !isSnapPhoto ? (
               <motion.div
@@ -1214,7 +1113,7 @@ const MealAnalysis = ({ isOpen, onClose, setIsSearchOpen, editEntry }: MealAnaly
                 transition={{ duration: 0.25 }}
                 className={cn(
                   "flex-1 overflow-y-auto overscroll-contain px-4",
-                  isDragging && "pointer-events-none"
+                  ""
                 )}
               >
                 <div className="grid grid-cols-2 gap-2.5 py-2">
@@ -2225,13 +2124,12 @@ const MealAnalysis = ({ isOpen, onClose, setIsSearchOpen, editEntry }: MealAnaly
               </motion.div>
             )}
           </AnimatePresence>
-          {/** bottom-only white gradient overlay for popup container */}
-          <div className="pointer-events-none absolute bottom-0 left-0 right-0 h-24 bg-gradient-to-b from-transparent to-white" />
-        </motion.div>
-      </MealAnalysisAnimate>
+          </div>
+        </div>
+      </div>
       <ProSubscriptionPanel isOpen={isProPanelOpen} onClose={() => setIsProPanelOpen(false)} />
-    </>
+    </div>
   );
 };
 
-export default MealAnalysis;
+export default AddMeal;

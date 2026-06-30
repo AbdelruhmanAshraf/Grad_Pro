@@ -3,6 +3,9 @@ importScripts('https://www.gstatic.com/firebasejs/10.12.2/firebase-app-compat.js
 importScripts('https://www.gstatic.com/firebasejs/10.12.2/firebase-messaging-compat.js')
 
 // IMPORTANT: Keep in sync with src/lib/firebase.ts
+// Service workers cannot read Vite env vars; the Firebase Web SDK config
+// below is public (it identifies the project — security is enforced by
+// Firestore/Storage rules, not by hiding this config).
 firebase.initializeApp({
   apiKey: "AIzaSyDnGBI6E-unDQ4zDMfHf9qgwMoci6p9e3Q",
   authDomain: "dietin-web.firebaseapp.com",

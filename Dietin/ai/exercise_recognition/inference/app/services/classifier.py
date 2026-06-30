@@ -229,7 +229,10 @@ class ExerciseClassifier:
             )
         model_input = self._scale_window(window)
         with self._predict_lock:
-            prediction = model.predict(model_input, verbose=0)
+            # Use direct __call__ instead of .predict() — avoids the per-call
+            # overhead of predict's batching/callback machinery, making
+            # single-sample inference ~2-5x faster.
+            prediction = model(model_input, training=False).numpy()
 
         if prediction.ndim != 2 or prediction.shape[1] != len(self.exercise_classes):
             raise ClassifierNotReadyError(

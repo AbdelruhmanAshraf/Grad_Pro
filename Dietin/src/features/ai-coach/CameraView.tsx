@@ -29,7 +29,12 @@ export const CameraView = forwardRef<HTMLVideoElement, CameraViewProps>(function
     (async () => {
       try {
         const got = await navigator.mediaDevices.getUserMedia({
-          video: { facingMode, width: { ideal: 960 }, height: { ideal: 720 } },
+          video: {
+            facingMode,
+            width: { ideal: 640 },
+            height: { ideal: 480 },
+            frameRate: { ideal: 15, max: 20 },
+          },
           audio: false,
         });
         if (cancelled) {

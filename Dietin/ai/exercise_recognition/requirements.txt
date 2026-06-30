@@ -9,3 +9,5 @@ keras==3.3.3
 joblib==1.4.2
 scikit-learn==1.5.0
 matplotlib==3.9.0
+# Phase A security: Firebase ID-token verification on every protected route.
+firebase-admin==6.5.0

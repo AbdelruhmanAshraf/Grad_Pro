@@ -1,49 +1,98 @@
 rules_version = '2';
 
+// Dietin Firestore Security Rules — Phase A hardened version.
+//
+// Design:
+//   * Default deny everything.
+//   * `users/{uid}` — owner can read/update/create/delete their own profile
+//     EXCEPT the server-managed fields listed in `SERVER_FIELDS`. Quota
+//     counters live there too, so a malicious client cannot reset their
+//     daily analysis count to zero.
+//   * `users/{uid}/{path=**}` — every nested subcollection (workouts, meals,
+//     progress photos, weekly reports, PRs, etc.) is owner-only at any depth.
+//   * `subscriptions/{id}` — owner can read their own row; ALL writes go
+//     through Cloud Functions (Admin SDK bypasses rules).
+//   * Everything else: deny.
 service cloud.firestore {
   match /databases/{database}/documents {
-    // Basic read/write access helper functions
+
     function isSignedIn() {
       return request.auth != null;
     }
-    
+
     function isOwner(userId) {
       return isSignedIn() && request.auth.uid == userId;
     }
-    
-    // Allow authenticated users to read and write their own user document
+
+    // Fields the client must never write directly. The Cloud Functions
+    // backend mutates them via the Admin SDK, which bypasses these rules.
+    // Adding a field here closes a quota-reset / privilege-escalation hole.
+    function serverOnlyFields() {
+      return [
+        // Subscription / entitlement
+        'isPro', 'proExpiresAt', 'plan', 'subscriptionId',
+        // AI usage counters (any reset = free unlimited usage)
+        'dailyMealAnalysisCount', 'dailyMealAnalysisDate',
+        'dailyImageAnalysisCount', 'dailyImageAnalysisDate',
+        'dailyWorkoutAnalysisCount', 'dailyWorkoutAnalysisDate',
+        'dailyHydrationAnalysisCount', 'dailyHydrationAnalysisDate',
+        'dailyTextGenAnalysisCount', 'dailyTextGenAnalysisDate'
+      ];
+    }
+
+    function diffTouchesServerFields() {
+      return request.resource.data
+        .diff(resource.data)
+        .changedKeys()
+        .hasAny(serverOnlyFields());
+    }
+
+    function createTouchesServerFields() {
+      return request.resource.data.keys().hasAny(serverOnlyFields());
+    }
+
+    // Basic field-size guard so a client cannot push huge strings into the
+    // user document (which Firestore would happily store and bill for).
+    function userDocSizeOk() {
+      return request.resource.data.size() < 200; // <200 top-level keys
+    }
+
+    // --------------------------------------------------------------------
+    // users/{uid}
+    // --------------------------------------------------------------------
     match /users/{userId} {
-      // Allow authenticated users to read their own document
       allow read: if isOwner(userId);
-      
-      // Allow creating a user document for authenticated users
-      allow create: if isOwner(userId);
-      
-      // Allow users to update their own document EXCEPT premium fields which are server-only
+
+      allow create: if isOwner(userId)
+        && userDocSizeOk()
+        && !createTouchesServerFields();
+
       allow update: if isOwner(userId)
-        && !request.resource.data.diff(resource.data).changedKeys().hasAny(['isPro', 'proExpiresAt', 'plan', 'subscriptionId']);
-      
-      // Allow users to delete their own document
+        && userDocSizeOk()
+        && !diffTouchesServerFields();
+
       allow delete: if isOwner(userId);
 
-      // Allow access to all subcollections
-      match /{subcollection}/{docId} {
+      // Nested workouts, meals, progress photos, weekly reports, PRs, etc.
+      // Owner-only at any depth.
+      match /{path=**} {
         allow read, write: if isOwner(userId);
       }
     }
-    
-    // Allow access to subscriptions collection
+
+    // --------------------------------------------------------------------
+    // subscriptions/{id}  — owner reads, server writes only.
+    // --------------------------------------------------------------------
     match /subscriptions/{subscriptionId} {
-      // Users may read only their own subscriptions
       allow read: if isSignedIn() && resource.data.uid == request.auth.uid;
-      
-      // Prevent clients from creating or mutating subscriptions; server (Admin SDK) writes bypass rules
       allow create, update, delete: if false;
     }
-    
-    // Default deny all
+
+    // --------------------------------------------------------------------
+    // Default deny
+    // --------------------------------------------------------------------
     match /{document=**} {
       allow read, write: if false;
     }
   }
-} 
+}

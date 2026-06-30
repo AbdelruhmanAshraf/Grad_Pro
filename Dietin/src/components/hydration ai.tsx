@@ -1,6 +1,5 @@
 import React, { useState, useEffect, useCallback } from 'react';
-import { GoogleGenerativeAI } from "@google/generative-ai";
-import { genAI } from "@/lib/gemini";
+import { generateJSON } from "@/lib/gemini";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
@@ -598,8 +597,6 @@ const HydrationAI: React.FC<HydrationAIProps> = ({
         throw new Error('Maximum retry attempts reached');
       }
 
-      const model = genAI.getGenerativeModel({ model: "gemini-2.0-flash" });
-      
       const currentDrinkType = getDrinkType(new Date().getHours());
       const timestamp = Date.now();
       const randomSeed = Math.floor(Math.random() * 1000000);
@@ -628,14 +625,8 @@ const HydrationAI: React.FC<HydrationAIProps> = ({
       STRICT FORMAT: Output MUST be valid JSON with no extra text, code fences, or explanations.
       Random seed: ${timestamp}-${randomSeed}`;
 
-      const result = await model.generateContent(prompt);
-      const response = await result.response;
-      const text = response.text();
-      
-      // Clean up the response text to ensure valid JSON
-      const cleanJson = text.replace(/```json\n|\n```|```/g, '').trim();
-      const newSuggestions = JSON.parse(cleanJson) as DrinkSuggestion[];
-      
+      const newSuggestions = await generateJSON<DrinkSuggestion[]>({ prompt });
+
       // Validate the response structure
       if (!Array.isArray(newSuggestions) || newSuggestions.length !== 3) {
         throw new Error('Invalid response format');
@@ -706,9 +697,7 @@ const HydrationAI: React.FC<HydrationAIProps> = ({
       setCurrentGenerationStep(t('hydrationAI.loading.analyzingRecipe'));
       updateLoadingStep('recipe', 0, 'loading');
       setGenerationProgress(10);
-      
-      const model = genAI.getGenerativeModel({ model: "gemini-2.0-flash" });
-      
+
       const prompt = `Generate a detailed recipe for: "${drink.name}"
       
       The user's UI language is ${responseLanguage}. For all human-readable text fields (ingredients, steps, tips, searchQuery), write them in ${responseLanguage}.
@@ -725,18 +714,12 @@ const HydrationAI: React.FC<HydrationAIProps> = ({
 
       updateLoadingStep('recipe', 1, 'loading');
       setGenerationProgress(20);
-      
-      const result = await model.generateContent(prompt);
-      const response = await result.response;
-      const text = response.text();
-      
+
+      const recipeData = await generateJSON<any>({ prompt });
+
       updateLoadingStep('recipe', 2, 'loading');
       setGenerationProgress(30);
-      
-      // Clean up the response text to ensure valid JSON
-      const cleanJson = text.replace(/```json\n|\n```|```/g, '').trim();
-      const recipeData = JSON.parse(cleanJson);
-      
+
       updateLoadingStep('recipe', 0, 'complete');
       updateLoadingStep('recipe', 1, 'complete');
       updateLoadingStep('recipe', 2, 'complete');

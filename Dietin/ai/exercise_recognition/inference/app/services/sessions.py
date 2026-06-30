@@ -20,6 +20,7 @@ class SessionNotFoundError(KeyError):
 class WorkoutSession:
     session_id: str
     classifier_state: ClassifierState
+    owner_uid: Optional[str] = None
     exercise: Optional[str] = None
     target_exercise: Optional[str] = None
     sets: int = 1
@@ -45,6 +46,7 @@ class WorkoutSession:
     started_at: float = field(default_factory=time.time)
     ended_at: Optional[float] = None
     rest_started_at: Optional[float] = None
+    last_activity_at: float = field(default_factory=time.time)
 
 
 class SessionManager:
@@ -58,6 +60,7 @@ class SessionManager:
         sets: int = 1,
         target_reps: int = 12,
         rest_timer: int = 60,
+        owner_uid: Optional[str] = None,
     ) -> WorkoutSession:
         session_id = uuid.uuid4().hex
         initial_exercise = normalize_exercise_label(exercise)
@@ -67,6 +70,7 @@ class SessionManager:
         session = WorkoutSession(
             session_id=session_id,
             classifier_state=self._classifier.create_state(),
+            owner_uid=owner_uid,
             exercise=initial_exercise,
             target_exercise=initial_exercise,
             sets=sets,
@@ -88,6 +92,32 @@ class SessionManager:
             session.ended_at = time.time()
         session.active = False
         return session
+
+    def touch(self, session: WorkoutSession) -> None:
+        """Mark session as recently active. Called on every accepted frame."""
+        session.last_activity_at = time.time()
+
+    def sweep_stale(self, idle_timeout_s: int, max_age_s: int) -> int:
+        """Remove sessions that have gone idle or hit the absolute lifetime cap.
+
+        Returns the number of sessions evicted. Safe to call concurrently with
+        in-flight requests because the FastAPI process is single-threaded per
+        worker and dict-pop is atomic for CPython.
+        """
+        now = time.time()
+        stale: list[str] = []
+        for sid, session in self._sessions.items():
+            idle_for = now - session.last_activity_at
+            age = now - session.started_at
+            if (
+                idle_for > idle_timeout_s
+                or age > max_age_s
+                or (session.ended_at is not None and now - session.ended_at > 300)
+            ):
+                stale.append(sid)
+        for sid in stale:
+            self._sessions.pop(sid, None)
+        return len(stale)
 
     def record_classification(
         self,

@@ -29,13 +29,15 @@ import {
   Brain,
   ChartBar,
   Sparkles,
-  Languages
+  Languages,
+  Database
 } from "lucide-react";
 import { format } from "date-fns";
 import { doc, getDoc, updateDoc, onSnapshot } from "firebase/firestore";
 import { onAuthStateChanged } from "firebase/auth";
 import { db, auth } from "@/lib/firebase";
 import { toast } from "sonner";
+import { loadDemoData } from "@/lib/demoData";
 import SettingsPanel from "@/components/SettingsPanel";
 import { cn } from "@/lib/utils";
 import BMIIndicator from "@/components/BMIIndicator";
@@ -383,6 +385,16 @@ const Profile = () => {
           onClick: () => {
             setInitialView('support');
             setIsSettingsOpen(true);
+          }
+        },
+        {
+          id: 'loadDemoData',
+          icon: Database,
+          label: 'Load Demo Data',
+          sublabel: 'Populate app with realistic dummy data',
+          onClick: async () => {
+            await loadDemoData();
+            window.location.reload(); // Reload to refresh all stores properly
           }
         }
       ]

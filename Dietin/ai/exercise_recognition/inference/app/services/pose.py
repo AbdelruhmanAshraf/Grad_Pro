@@ -37,7 +37,7 @@ def decode_frame(image_payload: str) -> np.ndarray:
     return frame
 
 
-def encode_frame_as_data_url(frame: np.ndarray, quality: int = 85) -> str:
+def encode_frame_as_data_url(frame: np.ndarray, quality: int = 60) -> str:
     ok, buffer = cv2.imencode(".jpg", frame, [cv2.IMWRITE_JPEG_QUALITY, quality])
     if not ok:
         raise ValueError("Could not encode annotated frame.")
@@ -57,7 +57,7 @@ class PoseService:
         self._lock = Lock()
         self._pose = mp_pose.Pose(
             static_image_mode=False,
-            model_complexity=1,
+            model_complexity=0,  # Lite model: ~3x faster, sufficient for exercise detection
             enable_segmentation=False,
             min_detection_confidence=min_detection_confidence,
             min_tracking_confidence=min_tracking_confidence,
@@ -67,7 +67,15 @@ class PoseService:
         if frame is None or frame.size == 0:
             raise ValueError("Frame is empty.")
 
-        annotated_frame = frame.copy()
+        # Downscale large frames before pose detection for faster processing
+        h, w = frame.shape[:2]
+        max_dim = 480
+        if max(h, w) > max_dim:
+            scale = max_dim / max(h, w)
+            frame = cv2.resize(frame, (int(w * scale), int(h * scale)),
+                               interpolation=cv2.INTER_AREA)
+
+        annotated_frame = frame.copy() if draw else frame
         rgb_frame = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
         rgb_frame.flags.writeable = False
         with self._lock:

@@ -1,41 +1,63 @@
 rules_version = '2';
+
+// Dietin Cloud Storage Security Rules — Phase A hardened version.
+//
+// Design:
+//   * Every authenticated user can only read/write their own files.
+//   * Profile pictures are publicly readable so other users (e.g. social
+//     features) can render them; writes are owner-only with hard caps.
+//   * Every write enforces a per-file size cap and a content-type allowlist
+//     so the bucket cannot be abused to host arbitrary binaries.
 service firebase.storage {
   match /b/{bucket}/o {
-    // Basic read/write access helper functions
+
     function isSignedIn() {
       return request.auth != null;
     }
-    
+
     function isOwner(userId) {
       return isSignedIn() && request.auth.uid == userId;
     }
-    
-    // Allow read access to all profile pictures
-    match /profilePictures/{userId}/{allImages=**} {
-      allow read;
-      allow write: if isOwner(userId);
-    }
-    
-    // Allow access to user's own meal images
-    match /mealImages/{userId}/{allImages=**} {
-      allow read: if isOwner(userId);
-      allow write: if isOwner(userId);
+
+    function isImage() {
+      return request.resource.contentType.matches('image/(jpeg|png|webp|heic|gif)');
     }
 
-    // Progress 2.0 — weekly transformation photos (front/side/back).
-    // Owner-only. Size capped at 5 MB and content-type forced to image/* to
-    // keep abuse vectors closed.
+    function underMaxSizeMb(maxMb) {
+      return request.resource.size < maxMb * 1024 * 1024;
+    }
+
+    // --- Profile pictures: public read, owner write, <=2 MB image ---------
+    match /profilePictures/{userId}/{allImages=**} {
+      allow read;
+      allow write: if isOwner(userId)
+        && isImage()
+        && underMaxSizeMb(2);
+      allow delete: if isOwner(userId);
+    }
+
+    // --- Meal images: owner only, <=5 MB image ---------------------------
+    match /mealImages/{userId}/{allImages=**} {
+      allow read: if isOwner(userId);
+      allow write: if isOwner(userId)
+        && isImage()
+        && underMaxSizeMb(5);
+      allow delete: if isOwner(userId);
+    }
+
+    // --- Progress 2.0 transformation photos (front/side/back) ------------
+    // Owner-only, <=5 MB, must be an image.
     match /progressPhotos/{userId}/{allPaths=**} {
       allow read: if isOwner(userId);
       allow write: if isOwner(userId)
-        && request.resource.size < 5 * 1024 * 1024
-        && request.resource.contentType.matches('image/.*');
+        && isImage()
+        && underMaxSizeMb(5);
       allow delete: if isOwner(userId);
     }
-    
-    // Default deny
+
+    // --- Default deny everything else ------------------------------------
     match /{allPaths=**} {
       allow read, write: if false;
     }
   }
-} 
+}

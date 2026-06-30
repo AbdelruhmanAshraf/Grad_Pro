@@ -6,22 +6,25 @@ import { GoogleGenerativeAI } from "@google/generative-ai";
 admin.initializeApp();
 const db = admin.firestore();
 
-// Helpers to read config
+// All secrets come from process.env (loaded via functions/.env locally,
+// or `firebase functions:secrets:set` in production). NEVER hardcode.
 const cfg = functions.config();
 const PAYMOB = {
-  API_KEY: cfg.paymob?.api_key as string,
-  HMAC_SECRET: cfg.paymob?.hmac_secret as string,
-  INTEGRATION_ID: cfg.paymob?.integration_id as string,
-  // Backward compatible: prefer iframe_id; fallback to merchant_id if you previously set it
-  IFRAME_ID: (cfg.paymob?.iframe_id as string) || (cfg.paymob?.merchant_id as string),
+  API_KEY: process.env.PAYMOB_API_KEY || (cfg.paymob?.api_key as string),
+  HMAC_SECRET: process.env.PAYMOB_HMAC_SECRET || (cfg.paymob?.hmac_secret as string),
+  INTEGRATION_ID: process.env.PAYMOB_INTEGRATION_ID || (cfg.paymob?.integration_id as string),
+  IFRAME_ID:
+    process.env.PAYMOB_IFRAME_ID ||
+    (cfg.paymob?.iframe_id as string) ||
+    (cfg.paymob?.merchant_id as string),
 };
 const APP = {
-  RETURN_URL: cfg.app?.return_url as string,
-  DOMAIN: cfg.app?.domain as string,
+  RETURN_URL: process.env.APP_RETURN_URL || (cfg.app?.return_url as string),
+  DOMAIN: process.env.APP_DOMAIN || (cfg.app?.domain as string),
 };
 const PERIOD = {
-  MONTH_DAYS: Number(cfg.subs?.month_days || 30),
-  YEAR_DAYS: Number(cfg.subs?.year_days || 365),
+  MONTH_DAYS: Number(process.env.SUBS_MONTH_DAYS || cfg.subs?.month_days || 30),
+  YEAR_DAYS: Number(process.env.SUBS_YEAR_DAYS || cfg.subs?.year_days || 365),
 };
 
 function addDays(date: Date, days: number) {
@@ -222,13 +225,70 @@ export const get_entitlement = functions.region("us-central1").https.onCall(asyn
 
 // --- GEMINI SECURITY FIX ---
 
-const GEMINI_API_KEY = "AIzaSyDxwvUw4C1EgJtCXNDzOXVECiC31-Mf_Ys";
-const genAI = new GoogleGenerativeAI(GEMINI_API_KEY);
+const GEMINI_API_KEY = process.env.GEMINI_API_KEY || "";
+const GEMINI_MODEL = process.env.GEMINI_MODEL || "gemini-1.5-pro";
+if (!GEMINI_API_KEY) {
+  console.warn("[functions] GEMINI_API_KEY missing — AI endpoints will return failed-precondition.");
+}
+const genAI = GEMINI_API_KEY ? new GoogleGenerativeAI(GEMINI_API_KEY) : null;
+
+function requireGemini() {
+  if (!genAI) {
+    throw new functions.https.HttpsError(
+      "failed-precondition",
+      "AI not configured: GEMINI_API_KEY missing on server."
+    );
+  }
+  return genAI;
+}
 
 const MEAL_LIMIT = 3;
 const IMAGE_LIMIT = 1;
+const WORKOUT_LIMIT = 5;
+const HYDRATION_LIMIT = 5;
+const TEXT_GEN_LIMIT = 10;
 
-async function checkQuota(uid: string, type: "meal" | "image") {
+// Sanitize Gemini text output before returning to client.
+// Strips control chars, normalizes whitespace, caps length.
+function sanitizeText(text: string, maxChars = 8000): string {
+  if (!text) return "";
+  return text
+    .replace(/[ --]/g, "")
+    .trim()
+    .slice(0, maxChars);
+}
+
+// Strip prompt-injection escape attempts from user input before forwarding to Gemini.
+// This is best-effort; the proxy endpoints also use strict system prompts + JSON-only output.
+function sanitizePromptInput(input: string, maxLen = 2000): string {
+  if (typeof input !== "string") return "";
+  return input
+    .replace(/[ -]/g, " ")
+    .replace(/```/g, " ")
+    .replace(/\b(system|assistant|developer)\s*:/gi, " ")
+    .trim()
+    .slice(0, maxLen);
+}
+
+type QuotaType = "meal" | "image" | "workout" | "hydration" | "textgen";
+
+const QUOTA_LIMITS: Record<QuotaType, number> = {
+  meal: MEAL_LIMIT,
+  image: IMAGE_LIMIT,
+  workout: WORKOUT_LIMIT,
+  hydration: HYDRATION_LIMIT,
+  textgen: TEXT_GEN_LIMIT,
+};
+
+const QUOTA_PREFIX: Record<QuotaType, string> = {
+  meal: "dailyMeal",
+  image: "dailyImage",
+  workout: "dailyWorkout",
+  hydration: "dailyHydration",
+  textgen: "dailyTextGen",
+};
+
+async function checkQuota(uid: string, type: QuotaType) {
   const userRef = db.collection("users").doc(uid);
   return db.runTransaction(async (t) => {
     const doc = await t.get(userRef);
@@ -240,7 +300,7 @@ async function checkQuota(uid: string, type: "meal" | "image") {
     if (isPro) return;
 
     const today = new Date().toISOString().split("T")[0];
-    const prefix = type === "meal" ? "dailyMeal" : "dailyImage";
+    const prefix = QUOTA_PREFIX[type];
     const dateField = `${prefix}AnalysisDate`;
     const countField = `${prefix}AnalysisCount`;
 
@@ -251,27 +311,34 @@ async function checkQuota(uid: string, type: "meal" | "image") {
       count = 0;
     }
 
-    const limit = type === "meal" ? MEAL_LIMIT : IMAGE_LIMIT;
+    const limit = QUOTA_LIMITS[type];
     if (count >= limit) {
-      throw new functions.https.HttpsError("resource-exhausted", `Daily ${type} analysis limit reached. Upgrade to Pro.`);
+      throw new functions.https.HttpsError(
+        "resource-exhausted",
+        `Daily ${type} analysis limit reached. Upgrade to Pro.`
+      );
     }
 
     t.set(userRef, {
       [dateField]: today,
-      [countField]: count + 1
+      [countField]: count + 1,
     }, { merge: true });
   });
 }
 
 export const analyze_food = functions.region("us-central1").https.onCall(async (data, context) => {
   if (!context.auth) throw new functions.https.HttpsError("unauthenticated", "Login required");
-  const description = data.description;
-  if (!description) throw new functions.https.HttpsError("invalid-argument", "Description required");
+  const rawDescription = typeof data?.description === "string" ? data.description : "";
+  if (!rawDescription) throw new functions.https.HttpsError("invalid-argument", "Description required");
+  if (rawDescription.length > 2000) {
+    throw new functions.https.HttpsError("invalid-argument", "Description too long (max 2000 chars).");
+  }
+  const description = sanitizePromptInput(rawDescription, 2000);
 
   await checkQuota(context.auth.uid, "meal");
 
   try {
-    const model = genAI.getGenerativeModel({ model: "gemini-2.0-flash" });
+    const model = requireGemini().getGenerativeModel({ model: GEMINI_MODEL });
 
     const validationPrompt = `Please validate if this user input is a food/drink/human consumable item.'
 Analyze this input: "${description}"
@@ -343,13 +410,21 @@ Return ONLY a JSON object in this exact format (no explanation, no other text):
 
 export const analyze_image_food = functions.region("us-central1").https.onCall(async (data, context) => {
   if (!context.auth) throw new functions.https.HttpsError("unauthenticated", "Login required");
-  const { imageBase64, mimeType } = data;
-  if (!imageBase64) throw new functions.https.HttpsError("invalid-argument", "Image required");
+  const { imageBase64, mimeType } = data || {};
+  if (!imageBase64 || typeof imageBase64 !== "string") {
+    throw new functions.https.HttpsError("invalid-argument", "Image required");
+  }
+  // base64 size cap: ~4 MB raw image (4_000_000 bytes -> ~5_400_000 chars in base64)
+  if (imageBase64.length > 6_000_000) {
+    throw new functions.https.HttpsError("invalid-argument", "Image too large (max ~4MB).");
+  }
+  const allowedMime = ["image/jpeg", "image/png", "image/webp", "image/heic"];
+  const mt = typeof mimeType === "string" && allowedMime.includes(mimeType) ? mimeType : "image/jpeg";
 
   await checkQuota(context.auth.uid, "image");
 
   try {
-    const model = genAI.getGenerativeModel({ model: "gemini-2.0-flash" });
+    const model = requireGemini().getGenerativeModel({ model: GEMINI_MODEL });
 
     // Basic validation helper
     const isFoodResult = await model.generateContent({
@@ -357,7 +432,7 @@ export const analyze_image_food = functions.region("us-central1").https.onCall(a
         role: "user",
         parts: [
           { text: 'Is this an image of food or a meal? Answer only with "yes" or "no".' },
-          { inlineData: { data: imageBase64, mimeType: mimeType || "image/jpeg" } }
+          { inlineData: { data: imageBase64, mimeType: mt } }
         ]
       }]
     });
@@ -381,15 +456,18 @@ Format as a clear, detailed description focused ONLY on the food content.`;
         role: "user",
         parts: [
           { text: analysisPrompt },
-          { inlineData: { data: imageBase64, mimeType: mimeType || "image/jpeg" } }
+          { inlineData: { data: imageBase64, mimeType: mt } }
         ]
       }]
     });
 
-    const description = (await result.response).text()
-      .trim()
-      .replace(/^(The image shows|I see|This is|In this image)/i, '')
-      .trim();
+    const description = sanitizeText(
+      (await result.response).text()
+        .trim()
+        .replace(/^(The image shows|I see|This is|In this image)/i, '')
+        .trim(),
+      4000,
+    );
 
     return { description };
 
@@ -398,3 +476,128 @@ Format as a clear, detailed description focused ONLY on the food content.`;
     throw new functions.https.HttpsError("internal", "Image analysis failed");
   }
 });
+
+// =========================================================================
+// Generic Gemini Proxy
+// -------------------------------------------------------------------------
+// `gemini_generate`      -> returns sanitized plain text from a text prompt
+// `gemini_generate_json` -> returns Gemini output strictly parsed as JSON
+// Both require Firebase ID-token auth (context.auth) and enforce daily
+// per-user quota under feature key "textgen".  Inputs are length-capped
+// and stripped of common prompt-injection escapes; outputs are sanitized
+// and length-capped before being returned to the client.
+// =========================================================================
+
+const PROMPT_MAX = 8000;
+const SYSTEM_MAX = 4000;
+const OUTPUT_MAX = 8000;
+
+const ALLOWED_MODELS = new Set(["gemini-2.0-flash", "gemini-1.5-pro", "gemini-1.5-flash", "gemini-1.5-flash-8b"]);
+
+function safeModelId(m: unknown): string {
+  if (typeof m === "string" && ALLOWED_MODELS.has(m)) return m;
+  return GEMINI_MODEL;
+}
+
+export const gemini_generate = functions
+  .region("us-central1")
+  .runWith({ timeoutSeconds: 60, memory: "256MB" })
+  .https.onCall(async (data, context) => {
+    if (!context.auth) {
+      throw new functions.https.HttpsError("unauthenticated", "Login required");
+    }
+    const rawPrompt = typeof data?.prompt === "string" ? data.prompt : "";
+    const rawSystem = typeof data?.system === "string" ? data.system : "";
+    const image = data?.image;
+    if (!rawPrompt) {
+      throw new functions.https.HttpsError("invalid-argument", "prompt required");
+    }
+    if (rawPrompt.length > PROMPT_MAX || rawSystem.length > SYSTEM_MAX) {
+      throw new functions.https.HttpsError("invalid-argument", "Input too long.");
+    }
+
+    const prompt = sanitizePromptInput(rawPrompt, PROMPT_MAX);
+    const system = rawSystem ? sanitizePromptInput(rawSystem, SYSTEM_MAX) : "";
+    const modelId = safeModelId(data?.model);
+    const imagePart = validateImagePart(image);
+
+    await checkQuota(context.auth.uid, imagePart ? "image" : "textgen");
+
+    try {
+      const model = requireGemini().getGenerativeModel({
+        model: modelId,
+        systemInstruction: system || undefined,
+      });
+      const parts: any[] = [{ text: prompt }];
+      if (imagePart) parts.push({ inlineData: imagePart });
+      const result = await model.generateContent({ contents: [{ role: "user", parts }] });
+      const text = sanitizeText((await result.response).text(), OUTPUT_MAX);
+      return { text };
+    } catch (e) {
+      console.error("gemini_generate error", e);
+      throw new functions.https.HttpsError("internal", "AI generation failed");
+    }
+  });
+
+export const gemini_generate_json = functions
+  .region("us-central1")
+  .runWith({ timeoutSeconds: 60, memory: "256MB" })
+  .https.onCall(async (data, context) => {
+    if (!context.auth) {
+      throw new functions.https.HttpsError("unauthenticated", "Login required");
+    }
+    const rawPrompt = typeof data?.prompt === "string" ? data.prompt : "";
+    const rawSystem = typeof data?.system === "string" ? data.system : "";
+    const image = data?.image;
+    if (!rawPrompt) {
+      throw new functions.https.HttpsError("invalid-argument", "prompt required");
+    }
+    if (rawPrompt.length > PROMPT_MAX || rawSystem.length > SYSTEM_MAX) {
+      throw new functions.https.HttpsError("invalid-argument", "Input too long.");
+    }
+
+    const prompt = sanitizePromptInput(rawPrompt, PROMPT_MAX);
+    const system = rawSystem ? sanitizePromptInput(rawSystem, SYSTEM_MAX) : "";
+    const modelId = safeModelId(data?.model);
+    const imagePart = validateImagePart(image);
+
+    await checkQuota(context.auth.uid, imagePart ? "image" : "textgen");
+
+    try {
+      const model = requireGemini().getGenerativeModel({
+        model: modelId,
+        systemInstruction: system || undefined,
+        generationConfig: { responseMimeType: "application/json" },
+      });
+      const parts: any[] = [{ text: prompt }];
+      if (imagePart) parts.push({ inlineData: imagePart });
+      const result = await model.generateContent({ contents: [{ role: "user", parts }] });
+      const raw = sanitizeText((await result.response).text(), OUTPUT_MAX);
+      const cleaned = raw.replace(/```json\n?|\n?```/g, "").trim();
+      let parsed: unknown;
+      try {
+        parsed = JSON.parse(cleaned);
+      } catch {
+        throw new functions.https.HttpsError("internal", "AI returned invalid JSON.");
+      }
+      return { json: parsed };
+    } catch (e) {
+      if (e instanceof functions.https.HttpsError) throw e;
+      console.error("gemini_generate_json error", e);
+      throw new functions.https.HttpsError("internal", "AI generation failed");
+    }
+  });
+
+function validateImagePart(image: unknown): { data: string; mimeType: string } | null {
+  if (!image || typeof image !== "object") return null;
+  const obj = image as { data?: unknown; mimeType?: unknown };
+  const data = typeof obj.data === "string" ? obj.data : "";
+  const mimeType = typeof obj.mimeType === "string" ? obj.mimeType : "";
+  if (!data) return null;
+  if (data.length > 6_000_000) {
+    throw new functions.https.HttpsError("invalid-argument", "Image too large (max ~4MB).");
+  }
+  const allowed = ["image/jpeg", "image/png", "image/webp", "image/heic"];
+  const mt = allowed.includes(mimeType) ? mimeType : "image/jpeg";
+  return { data, mimeType: mt };
+}

@@ -7,11 +7,10 @@ import { useTranslation } from "react-i18next";
 interface PlusButtonProps {
   isOpen: boolean;
   onClose: () => void;
-  setIsMealAnalysisOpen: (open: boolean) => void;
   setIsCustomPlanOpen: (open: boolean) => void;
 }
 
-const PlusButton = ({ isOpen, onClose, setIsMealAnalysisOpen, setIsCustomPlanOpen }: PlusButtonProps) => {
+const PlusButton = ({ isOpen, onClose, setIsCustomPlanOpen }: PlusButtonProps) => {
   const [isDragging, setIsDragging] = useState(false);
   const navigate = useNavigate();
   const location = useLocation();
@@ -27,10 +26,7 @@ const PlusButton = ({ isOpen, onClose, setIsMealAnalysisOpen, setIsCustomPlanOpe
 
   const handleMealLoggingClick = () => {
     onClose();
-    // Keep nav hidden during transition
-    setTimeout(() => {
-      setIsMealAnalysisOpen(true);
-    }, 300);
+    navigate('/add-meal');
   };
 
   const handleWorkoutPlanClick = () => {

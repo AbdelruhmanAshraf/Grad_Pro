@@ -1,7 +1,10 @@
+from __future__ import annotations
+
+import asyncio
 from contextlib import asynccontextmanager
 from typing import Dict, List, Optional
 
-from fastapi import FastAPI, HTTPException, Query
+from fastapi import Depends, FastAPI, HTTPException, Query, status
 from fastapi.middleware.cors import CORSMiddleware
 
 from .core.config import get_settings
@@ -16,6 +19,12 @@ from .schemas import (
     SessionStartResponse,
     SessionStatusResponse,
     WorkoutMetrics,
+)
+from .security import (
+    FirebaseUser,
+    assert_payload_size,
+    firebase_user,
+    rate_limit,
 )
 from .services.classifier import (
     Classification,
@@ -35,7 +44,33 @@ settings = get_settings()
 @asynccontextmanager
 async def lifespan(_app: FastAPI):
     _log_startup_state()
-    yield
+    task = asyncio.create_task(_session_cleanup_loop())
+    try:
+        yield
+    finally:
+        task.cancel()
+        try:
+            await task
+        except asyncio.CancelledError:
+            pass
+
+
+async def _session_cleanup_loop() -> None:
+    """Periodically evict idle / over-aged in-memory sessions."""
+    interval = max(10, settings.session_cleanup_interval_s)
+    while True:
+        try:
+            await asyncio.sleep(interval)
+            removed = session_manager.sweep_stale(
+                idle_timeout_s=settings.session_idle_timeout_s,
+                max_age_s=settings.session_max_age_s,
+            )
+            if removed:
+                print(f"[sessions] cleanup evicted {removed} stale sessions", flush=True)
+        except asyncio.CancelledError:
+            raise
+        except Exception as exc:  # pragma: no cover
+            print(f"[sessions] cleanup error: {exc}", flush=True)
 
 
 app = FastAPI(
@@ -52,8 +87,9 @@ app.add_middleware(
     CORSMiddleware,
     allow_origins=list(settings.cors_origins),
     allow_credentials=True,
-    allow_methods=["*"],
-    allow_headers=["*"],
+    allow_methods=["GET", "POST", "OPTIONS"],
+    allow_headers=["Authorization", "Content-Type", "Accept"],
+    max_age=600,
 )
 
 pose_service = PoseService()
@@ -90,6 +126,21 @@ def _get_session_or_404(session_id: str) -> WorkoutSession:
         raise HTTPException(status_code=404, detail="Workout session not found.")
 
 
+def _assert_owner(session: WorkoutSession, user: FirebaseUser) -> None:
+    """Reject requests for a session that belongs to a different user.
+
+    Anonymous-mode sessions (dev only) skip ownership checks because we have
+    no stable uid to bind them to.
+    """
+    if session.owner_uid is None or user.anonymous:
+        return
+    if session.owner_uid != user.uid:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Session does not belong to the authenticated user.",
+        )
+
+
 def _log_startup_state() -> None:
     """Print a single block confirming every artifact loaded at boot."""
     classifier_loaded = classifier.is_ready
@@ -111,6 +162,7 @@ def _log_startup_state() -> None:
         f"  Classes:         {len(classes)}",
         f"  Model version:   {MODEL_VERSION}",
         f"  Exercises:       {', '.join(exercises) if exercises else '(none)'}",
+        f"  CORS origins:    {', '.join(settings.cors_origins)}",
     ]
     if classifier.load_error:
         lines.append(f"  Load error:      {classifier.load_error}")
@@ -121,11 +173,7 @@ def _log_startup_state() -> None:
 
 @app.get("/api/health")
 def health() -> Dict[str, object]:
-    """Liveness and readiness probe.
-
-    Always returns 200 so the route is discoverable. Inspect ``classifier_loaded``
-    to determine whether ``/api/frame`` will be able to serve predictions.
-    """
+    """Liveness and readiness probe (unauthenticated by design)."""
     classifier_loaded = classifier.is_ready
     status = "healthy" if classifier_loaded else "degraded"
     response: Dict[str, object] = {
@@ -141,20 +189,15 @@ def health() -> Dict[str, object]:
 
 
 @app.get("/api/exercises", response_model=List[Exercise])
-def list_exercises() -> List[Exercise]:
-    """Return the 22-exercise display catalog backed by the classifier label set.
-
-    Catalog entries are filtered to ids the loaded classifier actually supports so the
-    UI cannot offer an exercise the model can't recognize. If the classifier failed to
-    load the full catalog is returned so the UI still renders during recovery.
-    """
+def list_exercises(
+    _user: FirebaseUser = Depends(firebase_user),
+) -> List[Exercise]:
+    """Return the 22-exercise display catalog backed by the classifier label set."""
     classifier_ids = set(classifier.exercise_classes) if classifier.is_ready else None
     catalog = get_catalog()
     if classifier_ids is not None:
         catalog = [entry for entry in catalog if entry["id"] in classifier_ids]
         for label in sorted(classifier_ids - {entry["id"] for entry in catalog}):
-            # New classifier label without catalog metadata: surface it as a stub so the
-            # UI shows the id rather than silently dropping a supported exercise.
             catalog.append(
                 {
                     "id": label,
@@ -168,12 +211,17 @@ def list_exercises() -> List[Exercise]:
 
 
 @app.post("/api/session/start", response_model=SessionStartResponse)
-def start_session(payload: SessionStartRequest) -> SessionStartResponse:
+def start_session(
+    payload: SessionStartRequest,
+    _size: None = Depends(assert_payload_size),
+    user: FirebaseUser = Depends(rate_limit("session")),
+) -> SessionStartResponse:
     session = session_manager.start(
         exercise=payload.exercise,
         sets=payload.sets,
         target_reps=payload.target_reps,
         rest_timer=payload.rest_timer,
+        owner_uid=user.uid,
     )
     return SessionStartResponse(
         session_id=session.session_id,
@@ -183,10 +231,18 @@ def start_session(payload: SessionStartRequest) -> SessionStartResponse:
 
 
 @app.post("/api/frame", response_model=FrameResponse)
-def process_frame(payload: FrameRequest) -> FrameResponse:
+def process_frame(
+    payload: FrameRequest,
+    _size: None = Depends(assert_payload_size),
+    user: FirebaseUser = Depends(rate_limit("frame")),
+) -> FrameResponse:
     session = _get_session_or_404(payload.session_id)
+    _assert_owner(session, user)
+
     if not session.active or session.ended_at is not None:
         raise HTTPException(status_code=409, detail="Workout session has ended.")
+
+    session_manager.touch(session)
 
     try:
         frame = decode_frame(payload.image)
@@ -254,8 +310,10 @@ def process_frame(payload: FrameRequest) -> FrameResponse:
 @app.get("/api/session/status", response_model=SessionStatusResponse)
 def session_status(
     session_id: str = Query(..., min_length=1),
+    user: FirebaseUser = Depends(rate_limit("session")),
 ) -> SessionStatusResponse:
     session = _get_session_or_404(session_id)
+    _assert_owner(session, user)
     return SessionStatusResponse(
         session_id=session.session_id,
         metrics=_metrics_response(session),
@@ -268,8 +326,13 @@ def session_status(
 
 
 @app.post("/api/session/end", response_model=SessionEndResponse)
-def end_session(payload: SessionEndRequest) -> SessionEndResponse:
+def end_session(
+    payload: SessionEndRequest,
+    _size: None = Depends(assert_payload_size),
+    user: FirebaseUser = Depends(rate_limit("session")),
+) -> SessionEndResponse:
     session = _get_session_or_404(payload.session_id)
+    _assert_owner(session, user)
     session_manager.end(session.session_id)
     return SessionEndResponse(
         session_id=session.session_id,

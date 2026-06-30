@@ -1,0 +1,41 @@
+{
+  "schemaVersion": 1,
+  "fermentId": "019f1927-19e8-71df-a4e1-5c1b2796f6e5",
+  "phaseId": "phase-1",
+  "phaseName": "Exit ferment immediately",
+  "attempt": 1,
+  "timestamp": "2026-06-30T16:34:54.722Z",
+  "goal": "Close the ferment in response to the user's exit request, performing zero work.",
+  "summary": "Phase completed: the ferment proposal reflects the user's exit request and no project files were changed during this ferment. Pre-existing working-tree changes are documented but outside this ferment's scope.",
+  "stepSummaries": "  1. Update the ferment proposal to reflect the user's 'exit this command' direction. [verified]\n  2. Confirm no project files were changed during this ferment. [verified]",
+  "diffAvailable": true,
+  "diffFilesChanged": " Dietin/.env.development                            |  11 +-\n Dietin/.env.production                             |   5 +\n Dietin/.gitignore                                  |  24 +-\n Dietin/.htaccess                                   |  27 +-\n Dietin/ai/exercise_recognition/config.py           |  55 ++-\n .../ai/exercise_recognition/inference/app/api.py   | 105 ++++-\n .../inference/app/services/classifier.py           |   5 +-\n .../inference/app/services/pose.py                 |  14 +-\n .../inference/app/services/sessions.py             |  30 ++\n Dietin/ai/exercise_recognition/requirements.txt    |   2 +\n Dietin/android/.gitignore                          | 101 -----\n Dietin/android/app/.gitignore                      |   2 -\n Dietin/android/app/build.gradle                    |  58 ---\n Dietin/android/app/capacitor.build.gradle          |  23 -\n Dietin/android/app/google-services.json            |  63 ---\n Dietin/android/app/proguard-rules.pro              |  21 -\n .../myapp/ExampleInstrumentedTest.java             |  26 --\n Dietin/android/app/src/main/AndroidManifest.xml    |  62 ---\n .../assets/fonts/SanFranciscoDisplay-Black.otf     | Bin 214304 -> 0 bytes\n .../main/assets/fonts/SanFranciscoDisplay-Bold.otf | Bin 221260 -> 0 bytes\n[... 129 more files ...]\n 148 files changed, 884 insertions(+), 3577 deletions(-)\n?? .kimchi/ferments/019f1927-19e8-71df-a4e1-5c1b2796f6e5.events.jsonl\n?? .kimchi/ferments/019f1927-19e8-71df-a4e1-5c1b2796f6e5.json\n?? .kimchi/ferments/019f1927-19e8-71df-a4e1-5c1b2796f6e5/runtime.json\n?? Dietin/ai/exercise_recognition/inference/app/security.py\n?? Dietin/docs/cleanup_report.md\n?? Dietin/docs/security_audit_after_fix.md",
+  "flags": [],
+  "derivedGrade": "A",
+  "reviewerRationale": "All gates pass; project checks validate.",
+  "gateVerdicts": [
+    {
+      "id": "F1",
+      "verdict": "pass",
+      "rationale": "Both steps used real verification: step-1 inspected the ferment proposal title/goal, and step-2 inspected git status and HEAD to confirm no edits were made by this ferment.",
+      "evidence": "Step-1 agent report confirmed title 'Exit Ferment Requested' and exit-referencing goal; Step-2 agent report confirmed HEAD unchanged and no files touched by this worker."
+    },
+    {
+      "id": "F2",
+      "verdict": "pass",
+      "rationale": "The phase goal was to close the ferment with zero work; the combined outputs show the proposal reflects the exit direction and no project files were changed by this ferment.",
+      "evidence": "Proposal title/goal verified; git status shows pre-existing changes only, no ferment-caused project-file changes."
+    },
+    {
+      "id": "F3",
+      "verdict": "pass",
+      "rationale": "Nothing was deferred. The working tree has pre-existing changes, but these are not undone work from this phase; they were simply noted for context.",
+      "evidence": "Agent report lists pre-existing changes as outside scope; no remaining steps or blockers."
+    }
+  ],
+  "projectChecks": {
+    "discovered": false,
+    "anyFailed": false,
+    "commands": []
+  }
+}

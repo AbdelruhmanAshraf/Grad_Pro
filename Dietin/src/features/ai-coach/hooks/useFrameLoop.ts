@@ -3,23 +3,36 @@ import { RefObject, useEffect, useRef } from "react";
 export interface FrameLoopOptions {
   videoRef: RefObject<HTMLVideoElement>;
   active: boolean;
-  /** Min ms between frames. 333 = 3 fps. */
+  /** Min ms between captures. Default 250 = 4 fps max. */
   intervalMs?: number;
-  /** JPEG quality 0..1. Lower = smaller payload. */
+  /** JPEG quality 0..1. Lower = smaller payload + faster encode. */
   quality?: number;
-  /** Max edge of the captured frame. Larger images waste bandwidth. */
+  /** Max edge of the captured frame. Smaller = less bandwidth. */
   maxEdge?: number;
-  /** Called per captured frame with a data: URL. Must be idempotent — drops
-   *  later frames while previous still in-flight. */
+  /** Called per captured frame with a data: URL. The loop waits for the
+   *  promise to settle before capturing the next frame (back-pressure). */
   onFrame: (dataUrl: string) => Promise<unknown> | void;
 }
 
+/**
+ * Captures webcam frames and sends them to the backend with **adaptive pacing**.
+ *
+ * Key performance improvements:
+ * - Back-pressure: waits for the previous `onFrame` promise to settle before
+ *   capturing the next frame, so the browser never queues multiple encode +
+ *   network requests and the video element stays responsive.
+ * - Canvas reuse: a single off-screen canvas is allocated once per mount.
+ * - Lower default resolution (480 px edge) and quality (0.5) halve the JPEG
+ *   payload without visible loss on the tiny preview.
+ * - Minimum inter-frame gap prevents busy-spinning when the server responds
+ *   faster than expected.
+ */
 export function useFrameLoop({
   videoRef,
   active,
-  intervalMs = 333,
-  quality = 0.6,
-  maxEdge = 720,
+  intervalMs = 250,
+  quality = 0.5,
+  maxEdge = 480,
   onFrame,
 }: FrameLoopOptions) {
   const inflightRef = useRef(false);
@@ -35,26 +48,43 @@ export function useFrameLoop({
     if (!video) return;
 
     const canvas = document.createElement("canvas");
-    const ctx = canvas.getContext("2d");
+    const ctx = canvas.getContext("2d", { willReadFrequently: false });
     if (!ctx) return;
 
     let raf = 0;
-    let last = 0;
+    let lastCapture = 0;
+    let prevWidth = 0;
+    let prevHeight = 0;
 
     const tick = (now: number) => {
       raf = requestAnimationFrame(tick);
+
+      // Back-pressure: skip while previous frame is still in-flight
       if (inflightRef.current) return;
-      if (now - last < intervalMs) return;
-      if (video.readyState < 2) return; // HAVE_CURRENT_DATA
+
+      // Throttle by minimum interval
+      if (now - lastCapture < intervalMs) return;
+
+      // Video must have data
+      if (video.readyState < 2) return;
       const vw = video.videoWidth;
       const vh = video.videoHeight;
       if (!vw || !vh) return;
-      last = now;
 
+      lastCapture = now;
+
+      // Only resize canvas when dimensions change
       const scale = Math.min(1, maxEdge / Math.max(vw, vh));
-      canvas.width = Math.round(vw * scale);
-      canvas.height = Math.round(vh * scale);
-      ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
+      const cw = Math.round(vw * scale);
+      const ch = Math.round(vh * scale);
+      if (cw !== prevWidth || ch !== prevHeight) {
+        canvas.width = cw;
+        canvas.height = ch;
+        prevWidth = cw;
+        prevHeight = ch;
+      }
+
+      ctx.drawImage(video, 0, 0, cw, ch);
       const dataUrl = canvas.toDataURL("image/jpeg", quality);
 
       inflightRef.current = true;

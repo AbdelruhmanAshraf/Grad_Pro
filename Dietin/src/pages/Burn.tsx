@@ -6,8 +6,7 @@ import { RefreshCw, Timer, Brain, Dumbbell, ChevronDown, ChevronUp, X, Pause, Pl
 import { cn } from "@/lib/utils";
 import { useState, useEffect, useRef } from "react";
 import { useTranslation } from 'react-i18next';
-import { GoogleGenerativeAI } from "@google/generative-ai";
-import { genAI } from "@/lib/gemini";
+import { generateJSON } from "@/lib/gemini";
 import { useNutritionStore } from "@/stores/nutritionStore";
 import { useUserStore } from "@/stores/userStore";
 import { Select, SelectTrigger, SelectValue, SelectContent, SelectItem } from "@/components/ui/select";
@@ -300,8 +299,6 @@ export const Burn = () => {
     }
     
     try {
-      const model = genAI.getGenerativeModel({ model: "gemini-2.0-flash" });
-      
       const timestamp = Date.now();
       const randomSeed = Math.floor(Math.random() * 1000000);
       const responseLanguage = i18n.language?.startsWith('ar') ? 'Arabic' : 'English';
@@ -353,13 +350,8 @@ export const Burn = () => {
         "tips": string[]
       }`;
 
-      const result = await model.generateContent(prompt);
-      const response = await result.response;
-      const text = response.text();
-      
-      const cleanJson = text.replace(/```json\n|\n```|```/g, '').trim();
-      const workoutData = JSON.parse(cleanJson);
-      
+      const workoutData = await generateJSON<any[]>({ prompt });
+
       const processedWorkouts = workoutData.map((data: any) => {
         const durationMinutes = parseInt(data.duration);
         const totalCalories = Math.round(data.caloriesPerMinute * durationMinutes);

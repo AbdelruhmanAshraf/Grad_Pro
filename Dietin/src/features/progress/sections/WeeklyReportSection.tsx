@@ -3,7 +3,7 @@ import { Sparkles, Lock, Share2 } from "lucide-react";
 import { useTranslation } from "react-i18next";
 import { useUserStore } from "@/stores/userStore";
 import { useProgressStore } from "@/stores/progressStore";
-import { genAI } from "@/lib/gemini";
+import { generateText } from "@/lib/gemini";
 import { Button } from "@/components/ui/button";
 import { DashboardCard } from "../components/DashboardCard";
 import { SectionHeader } from "../components/SectionHeader";
@@ -13,7 +13,7 @@ import { endOfIsoWeek, isoWeekId, localDateKey, startOfIsoWeek } from "../lib/da
 import { buildWeeklyReportPrompt, parseReportResponse, reportFromFallback } from "../lib/reportPrompt";
 import type { WeeklyReport } from "../types";
 
-const GEMINI_MODEL = "gemini-2.0-flash";
+const GEMINI_MODEL = import.meta.env.VITE_GEMINI_MODEL_FOOD || "gemini-2.5-pro";
 
 function summarizeWeek(args: {
   weekStart: string;
@@ -148,9 +148,8 @@ export function WeeklyReportSection() {
       let summaryText = "";
       let summaryHighlights: string[] = [];
       try {
-        const model = genAI.getGenerativeModel({ model: GEMINI_MODEL });
-        const result = await model.generateContent(prompt);
-        const parsed = parseReportResponse(result.response.text());
+        const text = await generateText({ prompt, model: GEMINI_MODEL });
+        const parsed = parseReportResponse(text);
         summaryText = parsed.summary;
         summaryHighlights = parsed.highlights;
       } catch (err) {

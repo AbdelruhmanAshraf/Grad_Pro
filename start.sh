@@ -26,6 +26,9 @@ echo "--> Starting Python AI Backend..."
 cd "$PYTHON_DIR" || exit
 
 if [ -d ".venv" ]; then
+    # Allow anonymous access for local development
+    export AI_ALLOW_ANONYMOUS=1
+    
     # Run the python server in the background
     .venv/bin/python inference/main.py &
     PYTHON_PID=$!

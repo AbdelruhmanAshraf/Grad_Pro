@@ -28,17 +28,14 @@ import { Textarea } from "@/components/ui/textarea";
 import {
   CalorieEntry
 } from "@/types";
-import { GoogleGenerativeAI } from "@google/generative-ai";
 import MealSuggestionsAI from "@/components/MealSuggestionsAI";
-import MealAnalysis from "@/components/MealAnalysis";
 import { toast } from "sonner";
 import ProSubscriptionPanel from "@/components/ProSubscriptionPanel";
 import NavHide from "@/components/NavHide";
 import ProFeatures from "@/components/ProFeatures";
-import { Link, useLocation } from "react-router-dom";
+import { Link, useLocation, useNavigate } from "react-router-dom";
 import { format } from "date-fns";
 // Removed unused UserProfile import to fix TS error
-import { genAI } from "@/lib/gemini";
 import { useTranslation } from 'react-i18next';
 
 const SPRING_CONFIG = {
@@ -144,12 +141,12 @@ const Diet = () => {
   const [portionSize, setPortionSize] = useState(100);
   const [portionUnit, setPortionUnit] = useState("g");
   const [canFocus, setCanFocus] = useState(false);
-  const [isMealAnalysisOpen, setIsMealAnalysisOpen] = useState(false);
   const [editingEntry, setEditingEntry] = useState<CalorieEntry | null>(null);
   const [isLoading, setIsLoading] = useState(false);
   const [mounted, setMounted] = useState(false);
 
   const location = useLocation();
+  const navigate = useNavigate();
   const { t } = useTranslation();
 
   const today = format(selectedDate, "yyyy-MM-dd");
@@ -698,7 +695,7 @@ const Diet = () => {
           <div className="flex items-center justify-between gap-2 mb-1">
             <Button
               className="w-full bg-white hover:bg-gray-50/95 shadow-[0_8px_30px_rgb(0,0,0,0.04)] hover:shadow-[0_8px_30px_rgb(0,0,0,0.06)] border border-gray-100 rounded-full px-5 py-3 flex items-center justify-center gap-2 transition-all duration-300"
-              onClick={() => setIsMealAnalysisOpen(true)}
+              onClick={() => navigate('/add-meal')}
             >
               <Plus className="h-4 w-4 text-gray-900" />
               <span className="text-sm font-medium text-gray-900">{t('diet.actions.addFood')}</span>
@@ -1029,8 +1026,7 @@ const Diet = () => {
                             size="icon"
                             className="h-8 w-8 text-gray-600 hover:text-gray-900 hover:bg-gray-100"
                             onClick={() => {
-                              setEditingEntry(entry);
-                              setIsMealAnalysisOpen(true);
+                              navigate('/add-meal', { state: { editEntry: entry } });
                             }}
                           >
                             <Pencil className="h-4 w-4" />
@@ -1066,19 +1062,6 @@ const Diet = () => {
         </div>
       </div>
       <ProSubscriptionPanel isOpen={isProPanelOpen} onClose={() => setIsProPanelOpen(false)} />
-      <MealAnalysis
-        isOpen={isMealAnalysisOpen}
-        onClose={() => {
-          setIsMealAnalysisOpen(false);
-          setEditingEntry(null);
-          // Refresh data when closing the analysis panel
-          const updatedData = getDailyCalories(today);
-          setDailyData(updatedData);
-          console.log("Refreshed data after meal analysis closed:", updatedData);
-        }}
-        setIsSearchOpen={setIsSearchOpen}
-        editEntry={editingEntry}
-      />
 
       {/* Search Popup */}
       <AnimatePresence>

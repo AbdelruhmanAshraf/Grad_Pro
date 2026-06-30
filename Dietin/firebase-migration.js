@@ -1,6 +1,12 @@
 // Firebase Migration Script
 // Run this script to migrate data from old Firebase project to new one
-// Usage: node firebase-migration.js
+// Usage:
+//   OLD_FIREBASE_API_KEY=... OLD_FIREBASE_PROJECT_ID=... \
+//   NEW_FIREBASE_API_KEY=... NEW_FIREBASE_PROJECT_ID=... \
+//   node firebase-migration.js
+// All Firebase config values come from env vars; this file MUST NOT contain
+// real keys, even if both keys belong to projects the team controls.
+require('dotenv').config();
 
 const { initializeApp } = require('firebase/app');
 const { getAuth, signInWithEmailAndPassword } = require('firebase/auth');
@@ -9,24 +15,31 @@ const {
   writeBatch, query, limit
 } = require('firebase/firestore');
 
-// Old Firebase config
+function requireEnv(name) {
+  const v = process.env[name];
+  if (!v) {
+    console.error(`[migration] Missing env ${name} — aborting.`);
+    process.exit(1);
+  }
+  return v;
+}
+
 const oldConfig = {
-  apiKey: "AIzaSyBCg9zzT-RRMsEXf6icSA9tkH2wdBi54lw",
-  authDomain: "dietin-4e618.firebaseapp.com",
-  projectId: "dietin-4e618",
-  storageBucket: "dietin-4e618.firebasestorage.app",
-  messagingSenderId: "517881147882",
-  appId: "1:517881147882:web:5544038867997477954293"
+  apiKey: requireEnv('OLD_FIREBASE_API_KEY'),
+  authDomain: requireEnv('OLD_FIREBASE_AUTH_DOMAIN'),
+  projectId: requireEnv('OLD_FIREBASE_PROJECT_ID'),
+  storageBucket: requireEnv('OLD_FIREBASE_STORAGE_BUCKET'),
+  messagingSenderId: requireEnv('OLD_FIREBASE_MESSAGING_SENDER_ID'),
+  appId: requireEnv('OLD_FIREBASE_APP_ID'),
 };
 
-// New Firebase config
 const newConfig = {
-  apiKey: "AIzaSyDnGBI6E-unDQ4zDMfHf9qgwMoci6p9e3Q",
-  authDomain: "dietin-web.firebaseapp.com",
-  projectId: "dietin-web",
-  storageBucket: "dietin-web.firebasestorage.app",
-  messagingSenderId: "139206279964",
-  appId: "1:139206279964:web:60f018e3ede4c0abaeb0d9"
+  apiKey: requireEnv('NEW_FIREBASE_API_KEY'),
+  authDomain: requireEnv('NEW_FIREBASE_AUTH_DOMAIN'),
+  projectId: requireEnv('NEW_FIREBASE_PROJECT_ID'),
+  storageBucket: requireEnv('NEW_FIREBASE_STORAGE_BUCKET'),
+  messagingSenderId: requireEnv('NEW_FIREBASE_MESSAGING_SENDER_ID'),
+  appId: requireEnv('NEW_FIREBASE_APP_ID'),
 };
 
 // Initialize old Firebase

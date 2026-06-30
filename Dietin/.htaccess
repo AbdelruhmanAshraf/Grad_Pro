@@ -1,7 +1,7 @@
 Options -MultiViews
 RewriteEngine On
 RewriteBase /
- 
+
  # 1) Do NOT rewrite direct PHP scripts or backend paths
  #    Adjust the prefixes to match your backend location
  RewriteCond %{REQUEST_URI} \.php$ [OR]
@@ -23,19 +23,36 @@ RewriteBase /
  # 3) Everything else goes to the SPA entry
  RewriteRule . /index.html [QSA,L]
 
-# Enable CORS
+# -----------------------------------------------------------------------------
+# CORS — explicit allowlist (no wildcards).
+# The previous `Access-Control-Allow-Origin: *` was unsafe because it lets any
+# site read responses to credentialed cross-origin requests. We now only echo
+# back the Origin header when it matches one of the trusted production /
+# local-dev origins.
+# -----------------------------------------------------------------------------
 <IfModule mod_headers.c>
-  Header always set Access-Control-Allow-Origin "*"
+  SetEnvIf Origin "^https://(dietin-web\.web\.app|dietin-web\.firebaseapp\.com|dietin\.app|www\.dietin\.app)$" CORS_ORIGIN=$0
+  SetEnvIf Origin "^http://(localhost|127\.0\.0\.1):(3000|3001|5173|5174|8080)$" CORS_ORIGIN=$0
+  Header always set Access-Control-Allow-Origin "%{CORS_ORIGIN}e" env=CORS_ORIGIN
+  Header always set Vary "Origin"
   Header always set Access-Control-Allow-Methods "GET, POST, PUT, PATCH, DELETE, OPTIONS"
   Header always set Access-Control-Allow-Headers "Content-Type, Authorization, X-Requested-With"
+  Header always set Access-Control-Max-Age "600"
 </IfModule>
 
+# -----------------------------------------------------------------------------
 # Security headers
+# -----------------------------------------------------------------------------
 <IfModule mod_headers.c>
   Header always set X-Content-Type-Options "nosniff"
-  Header always set X-XSS-Protection "1; mode=block"
   Header always set X-Frame-Options "SAMEORIGIN"
   Header always set Referrer-Policy "strict-origin-when-cross-origin"
+  Header always set Permissions-Policy "camera=(self), microphone=(), geolocation=(self), payment=(self)"
+  Header always set Strict-Transport-Security "max-age=31536000; includeSubDomains"
+  # Content Security Policy — locked down to first-party + the auth/payment
+  # providers the app actually talks to. Updating this list is a security
+  # decision: review every addition.
+  Header always set Content-Security-Policy "default-src 'self'; script-src 'self' 'unsafe-inline' 'unsafe-eval' https://www.gstatic.com https://apis.google.com https://*.firebaseio.com https://*.googleapis.com https://accept.paymob.com https://js.stripe.com https://cdn.paddle.com https://www.googletagmanager.com https://www.google-analytics.com; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; font-src 'self' https://fonts.gstatic.com data:; img-src 'self' data: blob: https:; media-src 'self' blob:; connect-src 'self' https://*.googleapis.com https://*.firebaseio.com https://firebasestorage.googleapis.com https://identitytoolkit.googleapis.com https://securetoken.googleapis.com https://generativelanguage.googleapis.com https://accept.paymob.com https://api.stripe.com https://*.run.app wss:; frame-src 'self' https://accept.paymob.com https://js.stripe.com https://*.firebaseapp.com; object-src 'none'; base-uri 'self'; form-action 'self'; frame-ancestors 'self'; upgrade-insecure-requests"
 </IfModule>
 
 # Caching
@@ -65,4 +82,4 @@ RewriteBase /
     AddOutputFilterByType DEFLATE application/rss+xml
     AddOutputFilterByType DEFLATE application/javascript
     AddOutputFilterByType DEFLATE application/x-javascript
-</IfModule> 
+</IfModule>

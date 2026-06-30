@@ -1,6 +1,5 @@
 import React, { useState, useEffect, useCallback } from 'react';
-import { GoogleGenerativeAI } from "@google/generative-ai";
-import { genAI } from "@/lib/gemini";
+import { generateJSON } from "@/lib/gemini";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
@@ -621,8 +620,6 @@ const MealSuggestionsAI: React.FC<MealSuggestionsAIProps> = ({
         throw new Error('Maximum retry attempts reached');
       }
 
-      const model = genAI.getGenerativeModel({ model: "gemini-2.0-flash" });
-
       const currentMealType = getMealType(new Date().getHours());
       const timestamp = Date.now();
       const randomSeed = Math.floor(Math.random() * 1000000);
@@ -734,18 +731,17 @@ Return EXACTLY 3 items in this JSON format (no extra text):
 ]`
 
       setCurrentGenerationStep(t('mealAI.steps.gatheringInsights', 'Gathering insights and generating suggestions...'));
-      const result = await model.generateContent(prompt);
-      const response = await result.response;
-      const text = response.text();
-
-      // Clean up the response text and ensure it starts with [ and ends with ]
-      const cleanJson = text.replace(/```json\n|\n```|```/g, '').trim();
-      if (!cleanJson.startsWith('[') || !cleanJson.endsWith(']')) {
+      let newSuggestions: MealSuggestionType[];
+      try {
+        newSuggestions = await generateJSON<MealSuggestionType[]>({ 
+          prompt, 
+          model: import.meta.env.VITE_GEMINI_MODEL_LITE || 'gemini-2.0-flash-lite' 
+        });
+      } catch {
         throw new Error('Invalid JSON format received');
       }
 
       try {
-        const newSuggestions = JSON.parse(cleanJson) as MealSuggestionType[];
 
         // Validate the response structure
         if (!Array.isArray(newSuggestions) || newSuggestions.length !== 3) {
@@ -890,8 +886,6 @@ Return EXACTLY 3 items in this JSON format (no extra text):
       updateLoadingStep('recipe', 0, 'loading');
       setGenerationProgress(10);
 
-      const model = genAI.getGenerativeModel({ model: "gemini-2.0-flash" });
-
       const isArabic = (i18n.language || '').toLowerCase().startsWith('ar');
       const languageInstruction = isArabic
         ? 'IMPORTANT: Reply in Arabic (Egyptian dialect - ar-EG). Keep numbers as numbers. Keep all JSON keys exactly as specified in English.'
@@ -912,16 +906,10 @@ Return EXACTLY 3 items in this JSON format (no extra text):
       updateLoadingStep('recipe', 1, 'loading');
       setGenerationProgress(20);
 
-      const result = await model.generateContent(prompt);
-      const response = await result.response;
-      const text = response.text();
+      const recipeData = await generateJSON<any>({ prompt });
 
       updateLoadingStep('recipe', 2, 'loading');
       setGenerationProgress(30);
-
-      // Clean up the response text to ensure valid JSON
-      const cleanJson = text.replace(/```json\n|\n```|```/g, '').trim();
-      const recipeData = JSON.parse(cleanJson);
 
       updateLoadingStep('recipe', 0, 'complete');
       updateLoadingStep('recipe', 1, 'complete');

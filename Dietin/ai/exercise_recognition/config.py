@@ -7,7 +7,8 @@ loaded at import time.
 """
 from __future__ import annotations
 
-from dataclasses import dataclass
+import os
+from dataclasses import dataclass, field
 from functools import lru_cache
 from pathlib import Path
 from typing import Tuple
@@ -35,6 +36,37 @@ TRAINING_METADATA_PATH: Path = ARTIFACTS_DIR / "training_metadata.json"
 CLASS_WEIGHTS_PATH: Path = ARTIFACTS_DIR / "class_weights.json"
 
 
+_DEV_ORIGINS: Tuple[str, ...] = (
+    "http://localhost:3000",
+    "http://127.0.0.1:3000",
+    "http://localhost:3001",
+    "http://127.0.0.1:3001",
+    "http://localhost:5173",
+    "http://127.0.0.1:5173",
+    "http://localhost:5174",
+    "http://127.0.0.1:5174",
+    "http://localhost:8080",
+    "http://127.0.0.1:8080",
+)
+
+
+def _parse_origins(env_value: str) -> Tuple[str, ...]:
+    return tuple(o.strip() for o in env_value.split(",") if o.strip())
+
+
+def _resolve_cors_origins() -> Tuple[str, ...]:
+    """Production origins come from AI_CORS_ORIGINS (comma separated).
+
+    When unset we fall back to a hard-coded localhost allowlist so local
+    Vite dev servers work out of the box. Wildcards are never used — they
+    would defeat the same-origin protection of the Firebase ID-token cookies.
+    """
+    env = os.getenv("AI_CORS_ORIGINS")
+    if env:
+        return _parse_origins(env)
+    return _DEV_ORIGINS
+
+
 @dataclass(frozen=True)
 class Settings:
     app_name: str = "Dietin Exercise Recognition API"
@@ -53,20 +85,13 @@ class Settings:
     default_target_reps: int = 12
     default_rest_timer: int = 60
 
-    # Dev server origins — Vite auto-increments the port when the default is taken
-    # (3000→3001, 5173→5174, etc.), so we whitelist the most common fallbacks too.
-    cors_origins: Tuple[str, ...] = (
-        "http://localhost:3000",
-        "http://127.0.0.1:3000",
-        "http://localhost:3001",
-        "http://127.0.0.1:3001",
-        "http://localhost:5173",
-        "http://127.0.0.1:5173",
-        "http://localhost:5174",
-        "http://127.0.0.1:5174",
-        "http://localhost:8080",
-        "http://127.0.0.1:8080",
-    )
+    # Session lifecycle
+    session_idle_timeout_s: int = 600         # 10 min without a frame -> stale
+    session_max_age_s: int = 4 * 60 * 60      # 4 h absolute lifetime
+    session_cleanup_interval_s: int = 60      # background sweep cadence
+
+    # CORS allowlist. Override at deploy time with the AI_CORS_ORIGINS env var.
+    cors_origins: Tuple[str, ...] = field(default_factory=_resolve_cors_origins)
 
 
 @lru_cache(maxsize=1)
