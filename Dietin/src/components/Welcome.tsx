@@ -8,6 +8,7 @@ import { LanguageSwitcher } from '@/components/LanguageSwitcher';
 import {
   ChevronRight,
   ChevronLeft,
+  Globe,
   User,
   Scale,
   Activity,
@@ -24,20 +25,29 @@ import {
   Facebook as FacebookIcon,
   Youtube as YoutubeIcon,
   Tv as TvIcon,
-  Users as UsersIcon,
+  Users,
   ThumbsDown,
   ThumbsUp,
   BarChart,
   Pizza,
-  Users,
-  Calendar as CalendarIcon,
-  Apple as AppleIcon,
   Drumstick,
   Fish,
   Leaf,
   Sun,
   Dumbbell,
-  Heart
+  Heart,
+  Check,
+  Egg,
+  Flame,
+  Rabbit,
+  Rocket,
+  Snail,
+  Timer,
+  Turtle,
+  Zap,
+  BicepsFlexed,
+  PersonStanding,
+  MoreHorizontal
 } from 'lucide-react';
 import { AnimatePresence, motion } from 'framer-motion';
 import { doc, setDoc, getDoc, updateDoc } from 'firebase/firestore';
@@ -46,6 +56,13 @@ import { auth, db } from '@/lib/firebase';
 import { toast } from 'sonner';
 import { Line } from 'react-chartjs-2';
 import ProSubscriptionPanel from './ProSubscriptionPanel';
+import HealthDisclaimerModal from './HealthDisclaimerModal';
+import {
+  DropdownMenu,
+  DropdownMenuTrigger,
+  DropdownMenuContent,
+  DropdownMenuItem,
+} from '@/components/ui/dropdown-menu';
 
 // Add TikTok and Google icons since they're not in lucide-react
 const TikTokIcon = () => (
@@ -70,61 +87,172 @@ const buttonClasses = (selected: boolean) => cn(
 );
 const cardClasses = "bg-white shadow-lg border border-black/5 rounded-2xl p-6 hover:bg-white/95 transition-all duration-300";
 
-const IntroStep = ({ onComplete }: { onComplete: () => void }) => {
-  const { t } = useTranslation();
-  const [textIndex, setTextIndex] = useState(0);
-  const texts = [
-    t('welcome.intro.hi', 'Hi.'),
-    t('welcome.intro.welcome', 'Welcome to Dietin'),
-    t('welcome.intro.unlock', "Let's unlock your full potential.")
-  ];
-  const [isExiting, setIsExiting] = useState(false);
 
-  useEffect(() => {
-    if (!isExiting) {
-      const timer = setTimeout(() => {
-        if (textIndex < texts.length - 1) {
-          setTextIndex(prev => prev + 1);
-        } else {
-          setIsExiting(true);
-          setTimeout(() => {
-            onComplete();
-          }, 1500);
-        }
-      }, 2000);
-      return () => clearTimeout(timer);
+const OptionCard = ({ title, subtitle, icon, isSelected, onClick }: any) => (
+  <button
+    onClick={onClick}
+    className={cn(
+      "relative flex flex-col items-center justify-center p-6 rounded-[2rem] border-2 transition-all duration-200 min-h-[160px] w-full",
+      isSelected 
+        ? "border-[#1c2333] bg-[#1c2333] text-white" 
+        : "border-transparent bg-white shadow-[0_4px_20px_rgb(0,0,0,0.04)] hover:shadow-[0_8px_30px_rgb(0,0,0,0.08)] text-[#1a1f2e]"
+    )}
+  >
+    {isSelected && (
+      <div className="absolute top-4 right-4 bg-white text-[#1c2333] rounded-full p-0.5">
+        <Check size={14} strokeWidth={3} />
+      </div>
+    )}
+    <div className={cn("mb-4", isSelected ? "text-white" : "text-[#1a1f2e]")}>
+      {icon}
+    </div>
+    <div className="font-bold text-lg mb-1 text-center leading-tight">{title}</div>
+    {subtitle && <div className={cn("text-xs text-center leading-tight mt-1", isSelected ? "text-white/80" : "text-[#7a7d85]")}>{subtitle}</div>}
+  </button>
+);
+
+const IntroStep = ({ onComplete }: { onComplete: () => void }) => {
+  const { t, i18n } = useTranslation();
+  const [stepIndex, setStepIndex] = useState(0);
+  const [isExiting, setIsExiting] = useState(false);
+  
+  const slides = [
+    {
+      image: '/onboarding/1.png',
+      title: t('onboarding.slide1_title', 'Welcome'),
+      subtitle: t('onboarding.slide1_subtitle', 'your fitness and nutrition companion'),
+      button: t('onboarding.continue', 'Continue'),
+      showBack: false
+    },
+    {
+      image: '/onboarding/2.png',
+      title: t('onboarding.slide2_title', 'Track progress'),
+      subtitle: t('onboarding.slide2_subtitle', 'Work out meals and insights'),
+      button: t('onboarding.continue', 'Continue'),
+      showBack: true
+    },
+    {
+      image: '/onboarding/3.png',
+      title: t('onboarding.slide3_title', 'Personalized plan'),
+      subtitle: t('onboarding.slide3_subtitle', 'Customized diet and workout plan'),
+      button: t('onboarding.continue', 'Continue'),
+      showBack: true
+    },
+    {
+      image: '/onboarding/4.png',
+      title: t('onboarding.slide4_title', 'Achieve your goals'),
+      subtitle: t('onboarding.slide4_subtitle', 'Stay motivated and achieve your goals'),
+      button: t('onboarding.get_started', 'Get Started'),
+      showBack: true
     }
-  }, [textIndex, isExiting, onComplete]);
+  ];
+
+  const handleNext = () => {
+    if (stepIndex < slides.length - 1) {
+      setStepIndex(prev => prev + 1);
+    } else {
+      setIsExiting(true);
+      setTimeout(() => {
+        onComplete();
+      }, 400);
+    }
+  };
+
+  const handleBack = () => {
+    if (stepIndex > 0) {
+      setStepIndex(prev => prev - 1);
+    }
+  };
+
+  const handleLanguageChange = (value: string) => {
+    i18n.changeLanguage(value);
+    try {
+      localStorage.setItem('app_language', value);
+      const isArabic = value.toLowerCase().startsWith('ar');
+      document.documentElement.dir = isArabic ? 'rtl' : 'ltr';
+      document.documentElement.lang = value;
+    } catch {}
+  };
+
+  const slide = slides[stepIndex];
 
   return (
-    <div className="min-h-screen flex flex-col items-center justify-center bg-gradient-to-b from-[#FAFAFA] from-0% via-[#F8F8F8] via-30% via-[#F5F5F5] via-60% to-[#F0F0F0] to-100%">
-      <AnimatePresence mode="wait" initial={true}>
-        {!isExiting && (
-          <motion.div
-            key={textIndex}
-            initial={{ opacity: 0 }}
-            animate={{
-              opacity: 1,
-              transition: {
-                duration: 0.5,
-                ease: "easeInOut"
-              }
-            }}
-            exit={{
-              opacity: 0,
-              transition: {
-                duration: 0.5,
-                ease: "easeInOut"
-              }
-            }}
-            className="text-center"
-          >
-            <h1 className="text-4xl font-bold text-black font-['SF Pro Display']">
-              {texts[textIndex]}
-            </h1>
-          </motion.div>
-        )}
+    <div className="min-h-screen flex flex-col items-center justify-between bg-white relative overflow-hidden px-6 py-8">
+      {/* Top Bar */}
+      <div className="w-full max-w-[1200px] mx-auto flex justify-between items-center z-10 pt-4">
+        <div className="w-12 h-12 flex items-center justify-center">
+          {slide.showBack && (
+            <button onClick={handleBack} className="p-2.5 rounded-full bg-[#f4f4f5] hover:bg-[#e4e4e7] transition-colors">
+              <ChevronLeft size={24} className="text-[#1a1f2e]" />
+            </button>
+          )}
+        </div>
+        <DropdownMenu>
+          <DropdownMenuTrigger asChild>
+            <button className="p-2.5 rounded-full bg-[#f4f4f5] hover:bg-[#e4e4e7] transition-colors focus:outline-none">
+              <Globe size={24} className="text-[#1a1f2e]" />
+            </button>
+          </DropdownMenuTrigger>
+          <DropdownMenuContent align="end" className="w-40 rounded-xl bg-white shadow-lg border border-gray-100">
+            <DropdownMenuItem onClick={() => handleLanguageChange('en')} className="cursor-pointer font-medium hover:bg-gray-50 focus:bg-gray-50 text-base py-2">
+              English
+            </DropdownMenuItem>
+            <DropdownMenuItem onClick={() => handleLanguageChange('ar-EG')} className="cursor-pointer font-medium hover:bg-gray-50 focus:bg-gray-50 text-base py-2">
+              العربية (مصر)
+            </DropdownMenuItem>
+          </DropdownMenuContent>
+        </DropdownMenu>
+      </div>
+
+      <AnimatePresence mode="wait">
+        <motion.div
+          key={stepIndex}
+          initial={{ opacity: 0, x: 20 }}
+          animate={{ opacity: 1, x: 0 }}
+          exit={{ opacity: 0, x: -20 }}
+          transition={{ duration: 0.3 }}
+          className="flex-1 w-full max-w-[1200px] mx-auto flex flex-col items-center justify-center text-center mt-8 mb-12"
+        >
+          <div className="px-4 mb-8">
+            <h1 className="text-[2rem] leading-tight font-bold text-[#1a1f2e] mb-3">{slide.title}</h1>
+            {slide.subtitle && (
+              <p className="text-[#7a7d85] text-lg">{slide.subtitle}</p>
+            )}
+          </div>
+          
+          <div className="w-full flex-1 min-h-[300px] relative flex items-center justify-center px-4">
+            <img 
+              src={slide.image} 
+              alt={slide.title} 
+              className="w-full h-full max-h-[45vh] object-contain" 
+            />
+          </div>
+        </motion.div>
       </AnimatePresence>
+
+      {/* Bottom Section */}
+      <div className="w-full max-w-[1200px] mx-auto flex flex-col items-center z-10 pb-4">
+        {/* Dots */}
+        <div className="flex gap-2 mb-10">
+          {slides.map((_, idx) => (
+            <div 
+              key={idx} 
+              className={cn(
+                "h-2.5 rounded-full transition-all duration-300",
+                idx === stepIndex ? "w-8 bg-[#1a1f2e]" : "w-2.5 bg-[#1a1f2e]/20"
+              )} 
+            />
+          ))}
+        </div>
+
+        {/* Button */}
+        <button 
+          onClick={handleNext}
+          className="w-full max-w-md py-4 rounded-full bg-[#1a1f2e] text-white font-bold text-xl shadow-[0_8px_30px_rgb(26,31,46,0.2)] hover:scale-[0.98] transition-transform"
+        >
+          {slide.button}
+        </button>
+      </div>
     </div>
   );
 };
@@ -133,7 +261,7 @@ export function Welcome() {
   const { t, i18n } = useTranslation();
   const navigate = useNavigate();
   const { updateUser } = useUserStore();
-  const [step, setStep] = useState(0);
+  const [step, setStep] = useState(-1);
   const [isVisible, setIsVisible] = useState(true);
   const [formData, setFormData] = useState<Partial<UserProfile>>({});
   // Local state to keep custom region input independent of quick-select buttons
@@ -144,13 +272,12 @@ export function Welcome() {
   const [isLoading, setIsLoading] = useState(false);
   const [showProPanel, setShowProPanel] = useState(false);
   const [aiResult, setAiResult] = useState<{
-    goal: string;
+    bmi: number;
     calories: number;
     metabolism: number;
     protein: number;
     carbs: number;
     fat: number;
-    estimatedWeeks: number;
   } | null>(null);
   const [isAnalyzing, setIsAnalyzing] = useState(false);
   const [aiStepReady, setAiStepReady] = useState(false);
@@ -159,6 +286,7 @@ export function Welcome() {
   const [lastInteractionTime, setLastInteractionTime] = useState(0);
   const [useMetric, setUseMetric] = useState(true);
   const [isProPanelOpen, setIsProPanelOpen] = useState(false);
+  const [showHealthDisclaimer, setShowHealthDisclaimer] = useState(false);
 
   // Deterministic, rule-based name validation
   const validateName = (raw: string): boolean => {
@@ -495,8 +623,8 @@ export function Welcome() {
         }
         updateUser(baseUserData);
 
-        // Navigate to home
-        navigate('/home');
+        // Show disclaimer instead of navigating directly
+        setShowHealthDisclaimer(true);
       } else {
         throw new Error('No authenticated user found');
       }
@@ -638,48 +766,36 @@ export function Welcome() {
     if (step === steps.findIndex(s => s.title === "Upgrade to DietinPro")) return true;
 
     switch (step) {
-      case 1: // Name step
+      case 0: // Name step
         return !!formData.name && formData.name.trim().length > 0 && isNameValid;
+      case 1: // Gender step
+        return !!formData.gender;
       case 2: // Birth date step
         return (formData.birthMonth !== undefined && formData.birthMonth !== null)
           && (formData.birthDay !== undefined && formData.birthDay !== null)
           && (formData.birthYear !== undefined && formData.birthYear !== null)
           && calculateAge(formData.birthYear, formData.birthMonth, formData.birthDay) >= 12;
-      case 3: // Gender step
-        return !!formData.gender;
-      case 4: // Height & weight step
+      case 3: // Physical Stats (Height & weight) step
         return isHeightValid() && isWeightValid();
-      case 5: // Current fitness level step
-        return !!formData.experienceLevel;
-      case 6: // Activity level step
-        return !!formData.activityLevel;
-      case 7: // Goal step
+      case 4: // Goal step
         return !!formData.goal;
-      case 8: // Target weight step
-        return !!formData.targetWeight &&
-          formData.targetWeight >= (formData.weight * 0.7) &&
-          formData.targetWeight <= (formData.weight * 1.3);
-      case 9: // Weekly progress goal step
+      case 5: // Desired Pace step
         return !!formData.weeklyGoal &&
           formData.weeklyGoal >= 0.2 &&
           formData.weeklyGoal <= 3.0;
-      case 10: // Workout days step
-        return !!formData.workoutDays;
-      case 11: // Workout duration step
-        return !!formData.workoutDuration;
-      case 12: // Past obstacles step
-        return !!formData.obstacles && formData.obstacles.length > 0;
-      case 13: // Physical limitations step
+      case 6: // Activity Level step
+        return !!formData.activityLevel;
+      case 7: // Training step
+        return !!formData.workoutDays || formData.workoutDays === 0;
+      case 8: // Diet Type step
+        return !!formData.diet;
+      case 9: // Health step
         return true; // Optional step
-      case 14: // Food allergies step
-        return true; // Optional step
-      case 15: // Regional food preference step
-        return !!formData.regionPreference && formData.regionPreference.trim().length > 0;
-      case 16: // DietinPro step
+      case 10: // Upgrade to DietinPro step
         return true; // Always valid
-      case 17: // AI Analysis step
+      case 11: // AI Analysis step
         return true; // Handled by AI analysis logic
-      case 18: // Final summary step
+      case 12: // Final summary step
         return true; // Always valid
       default:
         return true;
@@ -698,32 +814,17 @@ export function Welcome() {
     return age;
   };
 
-  const steps = [
+    const steps = [
     {
-      title: "",
-      description: "Let's create your personalized plan together",
-      icon: Sparkles,
+      title: "Your Name",
+      description: "This is how the app will address you.",
       fields: (
-        <div>
-          {/* Content removed - ready for new design */}
-        </div>
-      )
-    },
-    {
-      title: t('welcome.name.title', "What's your name?"),
-      description: t('welcome.name.desc', "Let's start with the basics"),
-      icon: User,
-      fields: (
-        <div className="space-y-4">
+        <div className="space-y-4 pt-4">
+          <div className="text-xs font-bold text-[#7a7d85] tracking-wider uppercase mb-2">FULL NAME</div>
           <input
             type="text"
-            id="name"
-            placeholder={t('welcome.name.placeholder', 'Enter your name')}
-            className={inputClasses}
-            inputMode="text"
-            autoComplete="name"
-            lang={i18n.language?.startsWith('ar') ? 'ar-EG' : undefined}
-            dir={i18n.language?.startsWith('ar') ? 'rtl' : 'ltr'}
+            placeholder="Enter your name"
+            className="w-full px-6 py-4 rounded-full bg-white text-[#1a1f2e] placeholder:text-[#1a1f2e]/40 focus:outline-none focus:ring-2 focus:ring-[#1a1f2e]/20 transition-all duration-300 font-bold text-lg shadow-[0_4px_20px_rgb(0,0,0,0.04)]"
             value={formData.name || ''}
             onChange={(e) => {
               const newName = e.target.value;
@@ -732,1190 +833,487 @@ export function Welcome() {
             }}
           />
           {formData.name && !isNameValid && (
-            <p className="text-red-500 text-sm">{t('welcome.name.error', 'Please enter a real name (letters only, 2-40 chars).')}</p>
+            <p className="text-red-500 text-sm pl-4">Please enter a valid real name.</p>
           )}
         </div>
       )
     },
     {
-      title: t('welcome.birth.title', 'When were you born?'),
-      description: t('welcome.birth.desc', 'This will be used to calibrate your custom plan.'),
+      title: "Gender",
+      description: "Biological sex.",
       fields: (
-        <div className="space-y-6">
-          <div className="grid grid-cols-3 gap-4">
-            <select
-              className={selectClasses}
-              onChange={(e) => updateForm({ birthMonth: parseInt(e.target.value) })}
-              value={(formData as any).birthMonth !== undefined ? String((formData as any).birthMonth) : ''}
-            >
-              <option value="">{t('welcome.birth.month', 'Month')}</option>
-              {Array.from({ length: 12 }, (_, i) => i).map((i) => {
-                const labels = [
-                  t('welcome.birth.months.january', 'January'),
-                  t('welcome.birth.months.february', 'February'),
-                  t('welcome.birth.months.march', 'March'),
-                  t('welcome.birth.months.april', 'April'),
-                  t('welcome.birth.months.may', 'May'),
-                  t('welcome.birth.months.june', 'June'),
-                  t('welcome.birth.months.july', 'July'),
-                  t('welcome.birth.months.august', 'August'),
-                  t('welcome.birth.months.september', 'September'),
-                  t('welcome.birth.months.october', 'October'),
-                  t('welcome.birth.months.november', 'November'),
-                  t('welcome.birth.months.december', 'December')
-                ];
-                const label = labels[i];
-                return (
-                  <option key={i} value={String(i)}>{label}</option>
-                );
-              })}
-            </select>
-            <select
-              className={selectClasses}
-              onChange={(e) => updateForm({ birthDay: parseInt(e.target.value) })}
-              value={(formData as any).birthDay !== undefined ? String((formData as any).birthDay) : ''}
-            >
-              <option value="">{t('welcome.birth.day', 'Day')}</option>
-              {Array.from({ length: 31 }, (_, i) => i + 1).map(day => (
-                <option key={day} value={String(day)}>{day}</option>
-              ))}
-            </select>
-            <select
-              className={selectClasses}
-              onChange={(e) => updateForm({ birthYear: parseInt(e.target.value) })}
-              value={(formData as any).birthYear !== undefined ? String((formData as any).birthYear) : ''}
-            >
-              <option value="">{t('welcome.birth.year', 'Year')}</option>
-              {Array.from({ length: 100 }, (_, i) => new Date().getFullYear() - i).map(year => (
-                <option key={year} value={String(year)}>{year}</option>
-              ))}
-            </select>
-          </div>
-          {(formData as any).birthYear && (formData as any).birthMonth !== undefined && (formData as any).birthDay &&
-            calculateAge((formData as any).birthYear, (formData as any).birthMonth, (formData as any).birthDay) < 12 && (
-              <p className="text-red-500 text-sm mt-2">
-                {t('welcome.birth.minAgeError', 'You must be at least 12 years old to use this app.')}
-              </p>
-            )}
+        <div className="grid grid-cols-2 gap-4 pt-4">
+          <OptionCard
+            title="Male"
+            icon={<User size={32} />}
+            isSelected={formData.gender === 'MALE'}
+            onClick={() => updateForm({ gender: 'MALE' })}
+          />
+          <OptionCard
+            title="Female"
+            icon={<User size={32} />}
+            isSelected={formData.gender === 'FEMALE'}
+            onClick={() => updateForm({ gender: 'FEMALE' })}
+          />
         </div>
       )
     },
     {
-      title: t('welcome.gender.title', 'Choose your gender'),
-      description: t('welcome.gender.desc', 'This will be used to calibrate your custom plan.'),
+      title: "Birth Date",
+      description: "Required to accurately calculate your age and metabolism.",
       fields: (
-        <div className="space-y-3">
-          {['MALE', 'FEMALE'].map((gender) => (
-            <button
-              key={gender}
-              onClick={() => updateForm({ gender: gender as Gender })}
-              className={buttonClasses(formData.gender === gender)}
-            >
-              {gender === 'MALE'
-                ? t('welcome.gender.options.male', 'Male')
-                : t('welcome.gender.options.female', 'Female')}
-            </button>
-          ))}
+        <div className="grid grid-cols-3 gap-3 pt-4">
+          <select
+            className="w-full px-4 py-4 rounded-2xl bg-white text-[#1a1f2e] font-bold shadow-[0_4px_20px_rgb(0,0,0,0.04)] appearance-none text-center"
+            onChange={(e) => updateForm({ birthMonth: parseInt(e.target.value) })}
+            value={(formData as any).birthMonth !== undefined ? String((formData as any).birthMonth) : ''}
+          >
+            <option value="">Month</option>
+            {Array.from({ length: 12 }, (_, i) => i).map((i) => (
+              <option key={i} value={String(i)}>{new Date(2000, i).toLocaleString('default', { month: 'short' })}</option>
+            ))}
+          </select>
+          <select
+            className="w-full px-4 py-4 rounded-2xl bg-white text-[#1a1f2e] font-bold shadow-[0_4px_20px_rgb(0,0,0,0.04)] appearance-none text-center"
+            onChange={(e) => updateForm({ birthDay: parseInt(e.target.value) })}
+            value={(formData as any).birthDay !== undefined ? String((formData as any).birthDay) : ''}
+          >
+            <option value="">Day</option>
+            {Array.from({ length: 31 }, (_, i) => i + 1).map(day => (
+              <option key={day} value={String(day)}>{day}</option>
+            ))}
+          </select>
+          <select
+            className="w-full px-4 py-4 rounded-2xl bg-white text-[#1a1f2e] font-bold shadow-[0_4px_20px_rgb(0,0,0,0.04)] appearance-none text-center"
+            onChange={(e) => updateForm({ birthYear: parseInt(e.target.value) })}
+            value={(formData as any).birthYear !== undefined ? String((formData as any).birthYear) : ''}
+          >
+            <option value="">Year</option>
+            {Array.from({ length: 100 }, (_, i) => new Date().getFullYear() - i).map(year => (
+              <option key={year} value={String(year)}>{year}</option>
+            ))}
+          </select>
         </div>
       )
     },
     {
-      title: t('welcome.hw.title', 'Height & weight'),
-      description: t('welcome.hw.desc', 'This will be used to calibrate your custom plan.'),
+      title: "Physical Stats",
+      description: "Height and Weight are essential for calculating your BMI and energy needs.",
       fields: (
-        <div className="space-y-6">
-          <div className="flex justify-between items-center mb-4">
-            <motion.span
-              initial={false}
-              animate={{ opacity: !useMetric ? 1 : 0.6 }}
-              className={!useMetric ? "font-bold text-black" : "text-black/60"}
-            >
-              {t('welcome.hw.units.imperial', 'Imperial')}
-            </motion.span>
-            <motion.button
-              role="switch"
-              aria-checked={useMetric}
-              whileTap={{ scale: 0.98 }}
-              onClick={() => {
-                setUseMetric(prev => {
-                  const newMetric = !prev;
-                  // Convert existing values
-                  if (formData.weight) {
-                    const newWeight = convertWeight(formData.weight, newMetric);
-                    updateForm({ weight: newWeight });
-                  }
-                  if (prev && formData.height) {
-                    // Converting from metric to imperial
-                    const { feet, inches } = convertToImperial(formData.height);
-                    updateForm({
-                      heightFt: feet,
-                      heightIn: inches,
-                      height: formData.height // Keep original cm value
-                    });
-                  } else if (!prev && formData.heightFt) {
-                    // Converting from imperial to metric
-                    const cm = convertToMetric(formData.heightFt, formData.heightIn || 0);
-                    updateForm({ height: cm });
-                  }
-                  return newMetric;
-                });
-              }}
-              className="w-12 h-6 rounded-full relative shadow-[0_8px_24px_rgba(0,0,0,0.1)]"
-              initial={false}
-              animate={{ backgroundColor: useMetric ? '#e8f5e9' : '#e3f2fd' }}
-              transition={{ type: 'spring', stiffness: 300, damping: 24 }}
-            >
-              <motion.div
-                className="absolute top-1 left-1 w-4 h-4 bg-black rounded-full"
-                initial={false}
-                animate={{ x: useMetric ? 24 : 0 }}
-                transition={{ type: 'spring', stiffness: 500, damping: 28 }}
-              />
-            </motion.button>
-            <motion.span
-              initial={false}
-              animate={{ opacity: useMetric ? 1 : 0.6 }}
-              className={useMetric ? "font-bold text-black" : "text-black/60"}
-            >
-              {t('welcome.hw.units.metric', 'Metric')}
-            </motion.span>
-          </div>
-          <div className="space-y-4">
-            <AnimatePresence mode="wait">
-              <motion.div
-                key={useMetric ? "metric" : "imperial"}
-                initial={{ opacity: 0 }}
-                animate={{ opacity: 1 }}
-                exit={{ opacity: 0 }}
-                transition={{ duration: 0.3, ease: "easeInOut" }}
-              >
-                <div>
-                  <label className="block text-sm mb-2">{t('welcome.hw.height.label', 'Height')} {useMetric ? '(cm)' : ''}</label>
-                  {useMetric ? (
-                    <input
-                      type="number"
-                      placeholder={t('welcome.hw.height.placeholderCm', 'cm')}
-                      className={cn(inputClasses, !isHeightValid() && formData.height && "ring-2 ring-red-500")}
-                      value={formData.height || ''}
-                      onChange={(e) => {
-                        const cm = parseInt(e.target.value);
-                        updateForm({ height: cm });
-                      }}
-                      min={120}
-                      max={220}
-                    />
-                  ) : (
-                    <div className="grid grid-cols-2 gap-4">
-                      <input
-                        type="number"
-                        placeholder={t('welcome.hw.height.placeholderFt', 'ft')}
-                        className={cn(inputClasses, !isHeightValid() && formData.heightFt && "ring-2 ring-red-500")}
-                        value={formData.heightFt || ''}
-                        onChange={(e) => {
-                          const ft = parseInt(e.target.value);
-                          const inches = formData.heightIn || 0;
-                          updateForm({
-                            heightFt: ft,
-                            height: convertToMetric(ft, inches)
-                          });
-                        }}
-                        min={4}
-                        max={7}
-                      />
-                      <input
-                        type="number"
-                        placeholder={t('welcome.hw.height.placeholderIn', 'in')}
-                        className={cn(inputClasses, !isHeightValid() && formData.heightIn && "ring-2 ring-red-500")}
-                        value={formData.heightIn || ''}
-                        onChange={(e) => {
-                          const inches = parseInt(e.target.value);
-                          const ft = formData.heightFt || 0;
-                          updateForm({
-                            heightIn: inches,
-                            height: convertToMetric(ft, inches)
-                          });
-                        }}
-                        min={0}
-                        max={11}
-                      />
-                    </div>
-                  )}
-                </div>
-              </motion.div>
-            </AnimatePresence>
-            <AnimatePresence mode="wait">
-              <motion.div
-                key={useMetric ? "metric-weight" : "imperial-weight"}
-                initial={{ opacity: 0 }}
-                animate={{ opacity: 1 }}
-                exit={{ opacity: 0 }}
-                transition={{ duration: 0.3, ease: "easeInOut" }}
-              >
-                <div>
-                  <label className="block text-sm mb-2">{t('welcome.hw.weight.label', 'Weight')} {useMetric ? '(kg)' : '(lbs)'}</label>
+        <div className="flex flex-col items-center pt-4">
+          <div className="flex justify-around w-full mb-8">
+            <div className="flex flex-col items-center">
+              <span className="text-xs font-bold text-[#7a7d85] tracking-wider uppercase mb-4">HEIGHT</span>
+              <div className="flex items-end gap-1">
+                {useMetric ? (
                   <input
                     type="number"
-                    className={cn(inputClasses, !isWeightValid() && formData.weight && "ring-2 ring-red-500")}
-                    value={formData.weight || ''}
-                    onChange={(e) => updateForm({ weight: parseInt(e.target.value) })}
-                    min={useMetric ? 30 : 66}
-                    max={useMetric ? 180 : 400}
-                    placeholder={useMetric ? t('welcome.hw.weight.placeholderKg', 'kg') : t('welcome.hw.weight.placeholderLbs', 'lbs')}
+                    value={formData.height || ''}
+                    onChange={(e) => updateForm({ height: parseFloat(e.target.value) })}
+                    className="text-5xl font-extrabold text-[#1a1f2e] w-24 text-center bg-transparent border-b-2 border-[#1a1f2e]/20 focus:outline-none focus:border-[#1a1f2e]"
+                    placeholder="175"
                   />
-                </div>
-              </motion.div>
-            </AnimatePresence>
-            {/* Validation Messages */}
-            <AnimatePresence>
-              {!isHeightValid() && (formData.height || formData.heightFt) && (
-                <motion.p
-                  initial={{ opacity: 0, height: 0 }}
-                  animate={{ opacity: 1, height: "auto" }}
-                  exit={{ opacity: 0, height: 0 }}
-                  className="text-red-500 text-sm"
-                >
-                  {useMetric ?
-                    t('welcome.hw.validation.heightMetric', 'Height must be between 120cm and 220cm') :
-                    t('welcome.hw.validation.heightImperial', 'Height must be between 4\'0" and 7\'11"')
-                  }
-                </motion.p>
-              )}
-              {!isWeightValid() && formData.weight && (
-                <motion.p
-                  initial={{ opacity: 0, height: 0 }}
-                  animate={{ opacity: 1, height: "auto" }}
-                  exit={{ opacity: 0, height: 0 }}
-                  className="text-red-500 text-sm"
-                >
-                  {useMetric ?
-                    t('welcome.hw.validation.weightMetric', 'Weight must be between 30kg and 180kg') :
-                    t('welcome.hw.validation.weightImperial', 'Weight must be between 66lbs and 400lbs')
-                  }
-                </motion.p>
-              )}
-            </AnimatePresence>
-          </div>
-        </div>
-      )
-    },
-    {
-      title: t('welcome.fitness.title', "What's your current fitness level?"),
-      description: t('welcome.fitness.desc', 'This helps us tailor the program to your experience'),
-      fields: (
-        <div className="space-y-3">
-          {[
-            { id: 'BEGINNER', label: t('welcome.fitness.options.beginner.label', 'Beginner'), desc: t('welcome.fitness.options.beginner.desc', 'New to fitness or getting back after a long break') },
-            { id: 'INTERMEDIATE', label: t('welcome.fitness.options.intermediate.label', 'Intermediate'), desc: t('welcome.fitness.options.intermediate.desc', 'Regular exercise with some experience') },
-            { id: 'ADVANCED', label: t('welcome.fitness.options.advanced.label', 'Advanced'), desc: t('welcome.fitness.options.advanced.desc', 'Experienced with consistent training') }
-          ].map((level) => (
-            <button
-              key={level.id}
-              onClick={() => updateForm({ experienceLevel: level.id as ExperienceLevel })}
-              className={buttonClasses(formData.experienceLevel === level.id)}
-            >
-              <div className="flex items-center gap-3">
-                <div className="text-left">
-                  <div className="font-bold">{level.label}</div>
-                  <div className="text-sm text-black/60">{level.desc}</div>
-                </div>
+                ) : (
+                  <div className="flex gap-2">
+                    <input
+                      type="number"
+                      value={formData.heightFt || ''}
+                      onChange={(e) => updateForm({ heightFt: parseFloat(e.target.value) })}
+                      className="text-5xl font-extrabold text-[#1a1f2e] w-16 text-center bg-transparent border-b-2 border-[#1a1f2e]/20 focus:outline-none focus:border-[#1a1f2e]"
+                      placeholder="5"
+                    />
+                    <input
+                      type="number"
+                      value={formData.heightIn || ''}
+                      onChange={(e) => updateForm({ heightIn: parseFloat(e.target.value) })}
+                      className="text-5xl font-extrabold text-[#1a1f2e] w-16 text-center bg-transparent border-b-2 border-[#1a1f2e]/20 focus:outline-none focus:border-[#1a1f2e]"
+                      placeholder="9"
+                    />
+                  </div>
+                )}
               </div>
-            </button>
-          ))}
-        </div>
-      )
-    },
-    {
-      title: t('welcome.activity.title', "What's your activity level?"),
-      description: t('welcome.activity.desc', 'This helps us calculate your daily energy needs'),
-      fields: (
-        <div className="space-y-3">
-          {[
-            { id: 'LIGHTLY_ACTIVE', label: t('welcome.activity.options.lightlyActive.label', 'Lightly Active'), desc: t('welcome.activity.options.lightlyActive.desc', 'Mostly sedentary with light exercise') },
-            { id: 'MODERATELY_ACTIVE', label: t('welcome.activity.options.moderatelyActive.label', 'Moderately Active'), desc: t('welcome.activity.options.moderatelyActive.desc', 'Regular exercise or active job') },
-            { id: 'VERY_ACTIVE', label: t('welcome.activity.options.veryActive.label', 'Very Active'), desc: t('welcome.activity.options.veryActive.desc', 'Daily exercise or physically demanding job') },
-            { id: 'EXTRA_ACTIVE', label: t('welcome.activity.options.extraActive.label', 'Extra Active'), desc: t('welcome.activity.options.extraActive.desc', 'Multiple training sessions or athlete') }
-          ].map((level) => (
-            <button
-              key={level.id}
-              onClick={() => updateForm({ activityLevel: level.id as ActivityLevel })}
-              className={buttonClasses(formData.activityLevel === level.id)}
-            >
-              <div className="flex items-center gap-3">
-                <div className="text-left">
-                  <div className="font-bold">{level.label}</div>
-                  <div className="text-sm text-black/60">{level.desc}</div>
-                </div>
-              </div>
-            </button>
-          ))}
-        </div>
-      )
-    },
-    {
-      title: t('welcome.goal.title', 'What is your goal?'),
-      description: t('welcome.goal.desc', 'This helps us generate a plan for your calorie intake.'),
-      fields: (
-        <div className="space-y-3">
-          {[
-            {
-              id: 'LOSE_WEIGHT',
-              label: t('welcome.goal.options.loseWeight.label', 'Lose weight'),
-              desc: t('welcome.goal.options.loseWeight.desc', 'Focus on reducing overall body weight'),
-              icon: Scale
-            },
-            {
-              id: 'LOSE_FAT',
-              label: t('welcome.goal.options.loseFat.label', 'Lose fat and maintain muscle'),
-              desc: t('welcome.goal.options.loseFat.desc', 'Focus on fat loss while preserving muscle mass'),
-              icon: Target
-            },
-            {
-              id: 'RECOMPOSITION',
-              label: t('welcome.goal.options.recomposition.label', 'Lose fat and gain muscle'),
-              desc: t('welcome.goal.options.recomposition.desc', 'Body recomposition - simultaneously reduce fat and build muscle'),
-              icon: Dumbbell
-            },
-            {
-              id: 'MAINTAIN_HEALTH',
-              label: t('welcome.goal.options.maintainHealth.label', 'Maintain and improve health'),
-              desc: t('welcome.goal.options.maintainHealth.desc', 'Focus on overall health and wellness while maintaining weight'),
-              icon: Heart
-            },
-            {
-              id: 'MAINTAIN_ATHLETIC',
-              label: t('welcome.goal.options.maintainAthletic.label', 'Maintain athletic performance'),
-              desc: t('welcome.goal.options.maintainAthletic.desc', 'Maintain weight while optimizing for athletic performance'),
-              icon: Activity
-            },
-            {
-              id: 'GAIN_MUSCLE',
-              label: t('welcome.goal.options.gainMuscle.label', 'Gain muscle'),
-              desc: t('welcome.goal.options.gainMuscle.desc', 'Focus on building muscle mass with minimal fat gain'),
-              icon: Dumbbell
-            },
-            {
-              id: 'GAIN_WEIGHT',
-              label: t('welcome.goal.options.gainWeight.label', 'Gain weight'),
-              desc: t('welcome.goal.options.gainWeight.desc', 'Focus on increasing overall body weight'),
-              icon: LineChart
-            }
-          ].map((goal) => (
-            <button
-              key={goal.id}
-              onClick={() => updateForm({ goal: goal.id as Goal })}
-              className={buttonClasses(formData.goal === goal.id)}
-            >
-              <div className="flex items-center gap-3 px-2">
-                <goal.icon className="w-6 h-6 flex-shrink-0" />
-                <div className="text-left">
-                  <div className="font-bold">{goal.label}</div>
-                  <div className={cn(
-                    "text-sm",
-                    formData.goal === goal.id ? "text-white/90" : "text-black/60"
-                  )}>{goal.desc}</div>
-                </div>
-              </div>
-            </button>
-          ))}
-        </div>
-      )
-    },
-    {
-      title: t('welcome.targetWeight.title', 'What is your desired weight?'),
-      description: "",
-      fields: (
-        <div className="space-y-6">
-          <div className="text-center">
-            <h3 className="text-2xl font-bold mb-2 text-black">
-              {formData.goal === 'LOSE_WEIGHT'
-                ? t('welcome.targetWeight.headings.default', 'Target Weight')
-                : formData.goal === 'GAIN_WEIGHT'
-                  ? t('welcome.targetWeight.headings.default', 'Target Weight')
-                  : formData.goal === 'LOSE_FAT'
-                    ? t('welcome.targetWeight.headings.preserveMuscle', 'Target Weight While Preserving Muscle')
-                    : formData.goal === 'GAIN_MUSCLE'
-                      ? t('welcome.targetWeight.headings.muscleGain', 'Target Weight With Muscle Gain')
-                      : formData.goal === 'RECOMPOSITION'
-                        ? t('welcome.targetWeight.headings.recomposition', 'Target Weight With Body Recomposition')
-                        : t('welcome.targetWeight.headings.default', 'Target Weight')}
-            </h3>
-
-            <div className="mt-8 mb-12 relative">
-              <div className="text-6xl font-bold tracking-tight">
-                {formData.targetWeight || formData.weight}
-                <span className="text-2xl ml-2 text-white/60 font-medium">
-                  {useMetric ? 'kg' : 'lbs'}
-                </span>
-              </div>
-
-              <div className="text-sm text-white/60 mt-2">
-                {useMetric
-                  ? `${Math.round((formData.targetWeight || formData.weight) * 2.20462)} ${t('welcome.targetWeight.unitLbs', 'lbs')}`
-                  : `${Math.round((formData.targetWeight || formData.weight) * 0.453592)} ${t('welcome.targetWeight.unitKg', 'kg')}`}
-              </div>
+              <span className="text-sm font-bold text-[#1a1f2e] mt-2">{useMetric ? 'CM' : 'FT / IN'}</span>
             </div>
-
-            <div className="space-y-8">
-              <div className="relative px-1">
+            
+            <div className="flex flex-col items-center">
+              <span className="text-xs font-bold text-[#7a7d85] tracking-wider uppercase mb-4">WEIGHT</span>
+              <div className="flex items-end gap-1">
                 <input
-                  type="range"
-                  min={useMetric ? formData.weight * 0.7 : Math.round(formData.weight * 0.7)}
-                  max={useMetric ? formData.weight * 1.3 : Math.round(formData.weight * 1.3)}
-                  step={useMetric ? 0.1 : 1}
-                  value={formData.targetWeight || formData.weight}
-                  onChange={(e) => {
-                    const value = parseFloat(e.target.value);
-                    updateForm({ targetWeight: value });
-                  }}
-                  className="w-full h-1 bg-gray-200 rounded-lg appearance-none cursor-pointer accent-black
-                    [&::-webkit-slider-thumb]:w-8 
-                    [&::-webkit-slider-thumb]:h-8 
-                    [&::-webkit-slider-thumb]:bg-black 
-                    [&::-webkit-slider-thumb]:rounded-full
-                    [&::-webkit-slider-thumb]:border-4
-                    [&::-webkit-slider-thumb]:border-white
-                    [&::-webkit-slider-thumb]:appearance-none
-                    [&::-webkit-slider-thumb]:shadow-lg
-                    [&::-webkit-slider-thumb]:transition-all
-                    [&::-webkit-slider-thumb]:duration-150
-                    [&::-webkit-slider-thumb]:ease-in-out
-                    [&::-webkit-slider-thumb:hover]:border-2
-                    [&::-webkit-slider-thumb:active]:scale-110"
+                  type="number"
+                  value={formData.weight || ''}
+                  onChange={(e) => updateForm({ weight: parseFloat(e.target.value) })}
+                  className="text-5xl font-extrabold text-[#1a1f2e] w-24 text-center bg-transparent border-b-2 border-[#1a1f2e]/20 focus:outline-none focus:border-[#1a1f2e]"
+                  placeholder={useMetric ? "70" : "154"}
                 />
-
-                <div className="flex justify-between text-xs text-white/60 mt-2 px-2">
-                  <span>
-                    {useMetric
-                      ? `${Math.round(formData.weight * 0.7)} ${t('welcome.targetWeight.unitKg', 'kg')}`
-                      : `${Math.round(formData.weight * 0.7)} ${t('welcome.targetWeight.unitLbs', 'lbs')}`}
-                  </span>
-                  <span>{t('welcome.targetWeight.current', 'Current')}</span>
-                  <span>
-                    {useMetric
-                      ? `${Math.round(formData.weight * 1.3)} ${t('welcome.targetWeight.unitKg', 'kg')}`
-                      : `${Math.round(formData.weight * 1.3)} ${t('welcome.targetWeight.unitLbs', 'lbs')}`}
-                  </span>
-                </div>
               </div>
-
-              <div className="bg-[#F5F5F5] rounded-2xl p-6">
-                <div className="flex items-center gap-4">
-                  <div className="p-3 bg-white rounded-xl">
-                    {formData.goal === 'LOSE_WEIGHT' || formData.goal === 'LOSE_FAT' ? '⬇️' :
-                      formData.goal === 'GAIN_WEIGHT' || formData.goal === 'GAIN_MUSCLE' ? '⬆️' :
-                        formData.goal === 'RECOMPOSITION' ? '🔄' : '⚖️'}
-                  </div>
-                  <div className="text-left">
-                    <p className="font-medium">
-                      {formData.goal === 'LOSE_WEIGHT' || formData.goal === 'LOSE_FAT'
-                        ? `${useMetric
-                          ? Math.abs(Math.round((formData.targetWeight || formData.weight) - formData.weight))
-                          : Math.abs(Math.round((formData.targetWeight || formData.weight) - formData.weight))} ${useMetric ? t('welcome.targetWeight.unitKg', 'kg') : t('welcome.targetWeight.unitLbs', 'lbs')} ${t('welcome.targetWeight.toTarget', 'to reach target')}`
-                        : formData.goal === 'GAIN_WEIGHT' || formData.goal === 'GAIN_MUSCLE'
-                          ? `${useMetric
-                            ? Math.abs(Math.round((formData.targetWeight || formData.weight) - formData.weight))
-                            : Math.abs(Math.round((formData.targetWeight || formData.weight) - formData.weight))} ${useMetric ? t('welcome.targetWeight.unitKg', 'kg') : t('welcome.targetWeight.unitLbs', 'lbs')} ${t('welcome.targetWeight.toGain', 'to gain')}`
-                          : formData.goal === 'RECOMPOSITION'
-                            ? t('welcome.targetWeight.focusRecomp', 'Focus on body composition change')
-                            : t('welcome.targetWeight.maintain', 'Maintain current weight')}
-                    </p>
-                    <button
-                      onClick={() => {
-                        // Compute recommended target using deterministic BMI-based calculator (no AI)
-                        const current = Number(formData.weight) || 0;
-                        const heightCm = formData.height ?? null;
-                        let next = computeRecommendedTargetWeight(current, heightCm, formData.goal as Goal, useMetric);
-                        // Clamp within slider bounds
-                        const min = useMetric ? current * 0.7 : Math.round(current * 0.7);
-                        const max = useMetric ? current * 1.3 : Math.round(current * 1.3);
-                        next = Math.min(Math.max(next, min), max);
-                        // Final guard to ensure not equal to current
-                        const MIN_DELTA = useMetric ? 0.5 : 1;
-                        if (Math.abs(next - current) < (useMetric ? 0.0001 : 0.0001)) {
-                          next = (formData.goal === 'LOSE_WEIGHT' || formData.goal === 'LOSE_FAT') ? current - MIN_DELTA : current + MIN_DELTA;
-                        }
-                        // Round to UI step
-                        next = useMetric ? Math.round(next * 10) / 10 : Math.round(next);
-                        updateForm({ targetWeight: next });
-                      }}
-                      className="text-sm text-blue-600 hover:text-blue-700 transition-colors mt-1"
-                    >
-                      {t('welcome.targetWeight.setRecommended', 'Set to recommended target')}
-                    </button>
-                  </div>
-                </div>
-              </div>
+              <span className="text-sm font-bold text-[#1a1f2e] mt-2">{useMetric ? 'KG' : 'LBS'}</span>
             </div>
           </div>
-        </div>
-      )
-    },
-    {
-      title: t('welcome.weeklyGoal.title', 'How fast do you want to reach your goal?'),
-      description: "",
-      fields: (
-        <div className="space-y-6">
-          <div className="text-center">
-            <h3 className="text-2xl font-bold mb-2 text-black">{t('welcome.weeklyGoal.subtitle', 'Weekly Progress Goal')}</h3>
-            <div className="text-6xl font-bold my-8 text-black">
-              {formData.weeklyGoal || 1.0}
-              <span className="text-2xl ml-2 text-black/60 font-medium">
-                {useMetric ? 'kg' : 'lbs'}
-              </span>
-            </div>
-            <div className="relative px-1">
-              <input
-                type="range"
-                min={useMetric ? 0.1 : 0.2}
-                max={useMetric ? 1.4 : 3.0}
-                step={useMetric ? 0.05 : 0.1}
-                value={formData.weeklyGoal || 1.0}
-                onChange={(e) => updateForm({ weeklyGoal: parseFloat(e.target.value) })}
-                className="w-full h-1 bg-gray-200 rounded-lg appearance-none cursor-pointer accent-black
-                  [&::-webkit-slider-thumb]:w-8 
-                  [&::-webkit-slider-thumb]:h-8 
-                  [&::-webkit-slider-thumb]:bg-black 
-                  [&::-webkit-slider-thumb]:rounded-full
-                  [&::-webkit-slider-thumb]:border-4
-                  [&::-webkit-slider-thumb]:border-white
-                  [&::-webkit-slider-thumb]:appearance-none
-                  [&::-webkit-slider-thumb]:shadow-lg
-                  [&::-webkit-slider-thumb]:transition-all
-                  [&::-webkit-slider-thumb]:duration-150
-                  [&::-webkit-slider-thumb]:ease-in-out
-                  [&::-webkit-slider-thumb:hover]:border-2
-                  [&::-webkit-slider-thumb:active]:scale-110"
-              />
-              <div className="flex justify-between text-sm mt-4 px-2">
-                <div className="text-center">
-                  <span className="text-black/60">{t('welcome.weeklyGoal.labels.steady', 'Steady')}</span>
-                </div>
-                <div className="text-center">
-                  <span className="text-black/60">{t('welcome.weeklyGoal.labels.balanced', 'Balanced')}</span>
-                </div>
-                <div className="text-center">
-                  <span className="text-black/60">{t('welcome.weeklyGoal.labels.ambitious', 'Ambitious')}</span>
-                </div>
-              </div>
-            </div>
-
-            <div className="mt-8">
-              <button
-                onClick={() => {
-                  let recommendedGoal;
-                  if (formData.goal === 'LOSE_WEIGHT' || formData.goal === 'LOSE_FAT') {
-                    recommendedGoal = useMetric ? 0.5 : 1.0;
-                  } else if (formData.goal === 'GAIN_WEIGHT' || formData.goal === 'GAIN_MUSCLE') {
-                    recommendedGoal = useMetric ? 0.25 : 0.5;
-                  } else {
-                    recommendedGoal = useMetric ? 0.35 : 0.75;
-                  }
-                  updateForm({ weeklyGoal: recommendedGoal });
-                }}
-                className="bg-white w-full rounded-2xl py-4 px-6 flex items-center justify-between group hover:bg-[#EBEBEB] transition-colors shadow-md"
-              >
-                <div className="flex items-center gap-3">
-                  <div className="p-3 bg-black/5 rounded-xl">
-                    ⚡️
-                  </div>
-                  <div className="text-left">
-                    <p className="font-medium text-black">{t('welcome.weeklyGoal.recommended.title', 'Recommended for your goal')}</p>
-                    <p className="text-sm text-black/60">{t('welcome.weeklyGoal.recommended.desc', 'Based on sustainable progress')}</p>
-                  </div>
-                </div>
-              </button>
-            </div>
-          </div>
-        </div>
-      )
-    },
-    {
-      title: t('welcome.workoutDays.title', 'How many workouts do you do per week?'),
-      description: t('welcome.workoutDays.desc', 'This will be used to calibrate your custom plan.'),
-      fields: (
-        <div className="space-y-3">
-          {[
-            { id: '0-2', label: t('welcome.workoutDays.options.0_2.label', '0-2'), desc: t('welcome.workoutDays.options.0_2.desc', 'Workouts now and then') },
-            { id: '3-5', label: t('welcome.workoutDays.options.3_5.label', '3-5'), desc: t('welcome.workoutDays.options.3_5.desc', 'A few workouts per week') },
-            { id: '6+', label: t('welcome.workoutDays.options.6_plus.label', '6+'), desc: t('welcome.workoutDays.options.6_plus.desc', 'Dedicated athlete') }
-          ].map((option) => (
+          
+          <div className="bg-[#f3f4f6] p-1 rounded-full flex gap-1 mt-8">
             <button
-              key={option.id}
-              onClick={() => updateForm({ workoutDays: option.id })}
-              className={buttonClasses(formData.workoutDays === option.id)}
+              onClick={() => setUseMetric(true)}
+              className={cn("px-6 py-2 rounded-full font-bold text-sm transition-all", useMetric ? "bg-white text-[#1a1f2e] shadow-sm" : "text-[#7a7d85] hover:text-[#1a1f2e]")}
             >
-              <div className="flex items-center">
-                <div className="flex-1 text-left">
-                  <div className="font-bold text-black">{option.label}</div>
-                  <div className="text-sm text-black/60">{option.desc}</div>
-                </div>
-              </div>
+              Metric
             </button>
-          ))}
-        </div>
-      )
-    },
-    {
-      title: t('welcome.workoutDuration.title', 'How long do you prefer to workout?'),
-      description: t('welcome.workoutDuration.desc', 'Choose your ideal workout duration'),
-      fields: (
-        <div className="space-y-3">
-          {[
-            { id: '30', label: t('welcome.workoutDuration.options.m30.label', '30 minutes'), desc: t('welcome.workoutDuration.options.m30.desc', 'Quick and effective workouts') },
-            { id: '45', label: t('welcome.workoutDuration.options.m45.label', '45 minutes'), desc: t('welcome.workoutDuration.options.m45.desc', 'Balanced workout duration') },
-            { id: '60', label: t('welcome.workoutDuration.options.m60.label', '60 minutes'), desc: t('welcome.workoutDuration.options.m60.desc', 'Full comprehensive sessions') },
-            { id: '90', label: t('welcome.workoutDuration.options.m90.label', '90+ minutes'), desc: t('welcome.workoutDuration.options.m90.desc', 'Extended training sessions') }
-          ].map((duration) => (
             <button
-              key={duration.id}
-              onClick={() => updateForm({ workoutDuration: duration.id })}
-              className={buttonClasses(formData.workoutDuration === duration.id)}
+              onClick={() => setUseMetric(false)}
+              className={cn("px-6 py-2 rounded-full font-bold text-sm transition-all", !useMetric ? "bg-white text-[#1a1f2e] shadow-sm" : "text-[#7a7d85] hover:text-[#1a1f2e]")}
             >
-              <div className="flex items-center gap-3">
-                <div className="text-left">
-                  <div className="font-bold">{duration.label}</div>
-                  <div className="text-sm text-black/60">{duration.desc}</div>
-                </div>
-              </div>
-            </button>
-          ))}
-        </div>
-      )
-    },
-    {
-      title: t('welcome.obstacles.title', 'What obstacles have prevented your success?'),
-      description: t('welcome.obstacles.desc', 'Select all that apply'),
-      fields: (
-        <div className="space-y-3">
-          {[
-            { id: 'TIME', label: t('welcome.obstacles.options.TIME.label', 'Lack of time'), desc: t('welcome.obstacles.options.TIME.desc', 'Busy schedule makes it hard to stay consistent') },
-            { id: 'MOTIVATION', label: t('welcome.obstacles.options.MOTIVATION.label', 'Low motivation'), desc: t('welcome.obstacles.options.MOTIVATION.desc', 'Difficulty staying motivated') },
-            { id: 'KNOWLEDGE', label: t('welcome.obstacles.options.KNOWLEDGE.label', 'Limited knowledge'), desc: t('welcome.obstacles.options.KNOWLEDGE.desc', 'Unsure about proper form or nutrition') },
-            { id: 'INJURIES', label: t('welcome.obstacles.options.INJURIES.label', 'Past injuries'), desc: t('welcome.obstacles.options.INJURIES.desc', 'Physical limitations or concerns') },
-            { id: 'STRESS', label: t('welcome.obstacles.options.STRESS.label', 'High stress'), desc: t('welcome.obstacles.options.STRESS.desc', 'Work or life stress affects consistency') },
-            { id: 'SLEEP', label: t('welcome.obstacles.options.SLEEP.label', 'Poor sleep'), desc: t('welcome.obstacles.options.SLEEP.desc', 'Inadequate rest affects performance') },
-            { id: 'NUTRITION', label: t('welcome.obstacles.options.NUTRITION.label', 'Diet challenges'), desc: t('welcome.obstacles.options.NUTRITION.desc', 'Difficulty maintaining healthy eating') }
-          ].map((obstacle) => (
-            <button
-              key={obstacle.id}
-              onClick={() => {
-                const current = formData.obstacles || [];
-                const updated = current.includes(obstacle.id)
-                  ? current.filter(id => id !== obstacle.id)
-                  : [...current, obstacle.id];
-                updateForm({ obstacles: updated });
-              }}
-              className={buttonClasses((formData.obstacles || []).includes(obstacle.id))}
-            >
-              <div className="flex items-center gap-3">
-                <div className="text-left">
-                  <div className="font-bold">{obstacle.label}</div>
-                  <div className="text-sm text-black/60">{obstacle.desc}</div>
-                </div>
-              </div>
-            </button>
-          ))}
-        </div>
-      )
-    },
-    {
-      title: t('welcome.limitations.title', 'Do you have any physical limitations?'),
-      description: t('welcome.limitations.desc', 'Select all that apply to receive modified exercises'),
-      fields: (
-        <div className="space-y-3">
-          {[
-            { id: 'BACK', label: t('welcome.limitations.options.BACK.label', 'Back issues'), desc: t('welcome.limitations.options.BACK.desc', 'Lower or upper back pain/injury') },
-            { id: 'KNEE', label: t('welcome.limitations.options.KNEE.label', 'Knee problems'), desc: t('welcome.limitations.options.KNEE.desc', 'Joint pain or previous injury') },
-            { id: 'SHOULDER', label: t('welcome.limitations.options.SHOULDER.label', 'Shoulder limitations'), desc: t('welcome.limitations.options.SHOULDER.desc', 'Restricted movement or pain') },
-            { id: 'WRIST', label: t('welcome.limitations.options.WRIST.label', 'Wrist/hand issues'), desc: t('welcome.limitations.options.WRIST.desc', 'Carpal tunnel or joint pain') },
-            { id: 'HIP', label: t('welcome.limitations.options.HIP.label', 'Hip problems'), desc: t('welcome.limitations.options.HIP.desc', 'Limited mobility or discomfort') },
-            { id: 'NONE', label: t('welcome.limitations.options.NONE.label', 'No limitations'), desc: t('welcome.limitations.options.NONE.desc', 'No physical restrictions') }
-          ].map((limitation) => (
-            <button
-              key={limitation.id}
-              onClick={() => {
-                if (limitation.id === 'NONE') {
-                  updateForm({ injuries: [] });
-                } else {
-                  const current = formData.injuries || [];
-                  const updated = current.includes(limitation.id)
-                    ? current.filter(id => id !== limitation.id)
-                    : [...current, limitation.id];
-                  updateForm({ injuries: updated });
-                }
-              }}
-              className={buttonClasses(
-                limitation.id === 'NONE'
-                  ? (formData.injuries || []).length === 0
-                  : (formData.injuries || []).includes(limitation.id)
-              )}
-            >
-              <div className="flex items-center gap-3">
-                <div className="text-left">
-                  <div className="font-bold">{limitation.label}</div>
-                  <div className="text-sm text-black/60">{limitation.desc}</div>
-                </div>
-              </div>
-            </button>
-          ))}
-        </div>
-      )
-    },
-    {
-      title: t('welcome.allergies.title', 'Do you have any food allergies?'),
-      description: t('welcome.allergies.desc', 'Select all that apply to receive safe meal suggestions'),
-      fields: (
-        <div className="space-y-3">
-          {[
-            { id: 'DAIRY', label: t('welcome.allergies.options.DAIRY.label', 'Dairy'), desc: t('welcome.allergies.options.DAIRY.desc', 'Milk, cheese, yogurt') },
-            { id: 'NUTS', label: t('welcome.allergies.options.NUTS.label', 'Tree nuts'), desc: t('welcome.allergies.options.NUTS.desc', 'Almonds, walnuts, cashews') },
-            { id: 'PEANUT', label: t('welcome.allergies.options.PEANUT.label', 'Peanuts'), desc: t('welcome.allergies.options.PEANUT.desc', 'Peanuts and peanut products') },
-            { id: 'GLUTEN', label: t('welcome.allergies.options.GLUTEN.label', 'Gluten'), desc: t('welcome.allergies.options.GLUTEN.desc', 'Wheat, barley, rye') },
-            { id: 'SOY', label: t('welcome.allergies.options.SOY.label', 'Soy'), desc: t('welcome.allergies.options.SOY.desc', 'Soybeans and soy products') },
-            { id: 'SHELLFISH', label: t('welcome.allergies.options.SHELLFISH.label', 'Shellfish'), desc: t('welcome.allergies.options.SHELLFISH.desc', 'Shrimp, crab, lobster') },
-            { id: 'EGGS', label: t('welcome.allergies.options.EGGS.label', 'Eggs'), desc: t('welcome.allergies.options.EGGS.desc', 'Eggs and egg products') },
-            { id: 'NONE', label: t('welcome.allergies.options.NONE.label', 'No allergies'), desc: t('welcome.allergies.options.NONE.desc', 'No food restrictions') }
-          ].map((allergy) => (
-            <button
-              key={allergy.id}
-              onClick={() => {
-                if (allergy.id === 'NONE') {
-                  updateForm({ allergies: [] });
-                } else {
-                  const current = formData.allergies || [];
-                  const updated = current.includes(allergy.id)
-                    ? current.filter(id => id !== allergy.id)
-                    : [...current, allergy.id];
-                  updateForm({ allergies: updated });
-                }
-              }}
-              className={buttonClasses(
-                allergy.id === 'NONE'
-                  ? (formData.allergies || []).length === 0
-                  : (formData.allergies || []).includes(allergy.id)
-              )}
-            >
-              <div className="flex items-center gap-3">
-                <div className="text-left">
-                  <div className="font-bold">{allergy.label}</div>
-                  <div className="text-sm text-black/60">{allergy.desc}</div>
-                </div>
-              </div>
-            </button>
-          ))}
-        </div>
-      )
-    },
-    {
-      title: t('welcome.cuisines.title', 'What regional cuisines do you prefer?'),
-      description: t('welcome.cuisines.desc', "We'll bias meal ideas toward this preference"),
-      fields: (
-        <div className="space-y-3">
-          <div className="grid gap-3">
-            {[
-              { label: t('welcome.cuisines.options.mediterranean', 'Mediterranean'), emoji: '🫒' },
-              { label: t('welcome.cuisines.options.indian', 'Indian'), emoji: '🍛' },
-              { label: t('welcome.cuisines.options.mexican', 'Mexican'), emoji: '🌮' },
-              { label: t('welcome.cuisines.options.eastAsian', 'East Asian'), emoji: '🥢' },
-              { label: t('welcome.cuisines.options.middleEastern', 'Middle Eastern'), emoji: '🥙' },
-              { label: t('welcome.cuisines.options.american', 'American'), emoji: '🍔' },
-              { label: t('welcome.cuisines.options.african', 'African'), emoji: '🍲' },
-              { label: t('welcome.cuisines.options.latinAmerican', 'Latin American'), emoji: '🥟' },
-              { label: t('welcome.cuisines.options.southeastAsian', 'Southeast Asian'), emoji: '🍜' },
-              { label: t('welcome.cuisines.options.european', 'European'), emoji: '🥖' }
-            ].map((opt) => (
-              <button
-                key={opt.label}
-                onClick={() => { setCustomRegionActive(false); updateForm({ regionPreference: opt.label }); }}
-                className={buttonClasses(formData.regionPreference === opt.label)}
-              >
-                <div className="flex items-center gap-3">
-                  <span className="text-xl" aria-hidden>{opt.emoji}</span>
-                  <div className="text-left font-bold">{opt.label}</div>
-                </div>
-              </button>
-            ))}
-            <button
-              onClick={() => { setCustomRegionActive(false); updateForm({ regionPreference: 'None' }); }}
-              className={buttonClasses(formData.regionPreference === 'None')}
-            >
-              <div className="flex items-center gap-3">
-                <span className="text-xl" aria-hidden>🎯</span>
-                <div className="text-left">
-                  <div className="font-bold">{t('welcome.cuisines.none.title', 'No strong preference')}</div>
-                  <div className="text-sm text-black/60">{t('welcome.cuisines.none.subtitle', 'Show a broad variety')}</div>
-                </div>
-              </div>
+              Imperial
             </button>
           </div>
-          <div className="pt-2">
-            <input
-              type="text"
-              value={customRegionActive ? customRegion : ''}
-              onFocus={() => setCustomRegionActive(true)}
-              onChange={(e) => { setCustomRegion(e.target.value); updateForm({ regionPreference: e.target.value }); }}
-              placeholder={t('welcome.cuisines.custom.placeholder', 'Or type a region/cuisine (e.g., Japanese, Italian)')}
-              className={cn(inputClasses, 'bg-white text-black opacity-100 pointer-events-auto')}
-              aria-label={t('welcome.cuisines.custom.aria', 'Custom regional cuisine preference')}
-            />
+        </div>
+      )
+    },
+    {
+      title: "Goal",
+      description: "Choose a target.",
+      fields: (
+        <div className="grid grid-cols-2 gap-4 pt-4">
+          <OptionCard
+            title="Cutting (Fat Loss)"
+            icon={<Flame size={32} />}
+            isSelected={formData.goal === 'LOSE_FAT'}
+            onClick={() => updateForm({ goal: 'LOSE_FAT' })}
+          />
+          <OptionCard
+            title="Rapid Weight Loss"
+            icon={<Zap size={32} />}
+            isSelected={formData.goal === 'LOSE_WEIGHT'}
+            onClick={() => updateForm({ goal: 'LOSE_WEIGHT' })}
+          />
+          <OptionCard
+            title="Maintenance"
+            icon={<Scale size={32} />}
+            isSelected={formData.goal === 'MAINTAIN_HEALTH'}
+            onClick={() => updateForm({ goal: 'MAINTAIN_HEALTH' })}
+          />
+          <OptionCard
+            title="Bulking (Muscle Gain)"
+            icon={<BicepsFlexed size={32} />}
+            isSelected={formData.goal === 'GAIN_MUSCLE'}
+            onClick={() => updateForm({ goal: 'GAIN_MUSCLE' })}
+          />
+          <OptionCard
+            title="Lean Bulking"
+            icon={<Drumstick size={32} />}
+            isSelected={formData.goal === 'GAIN_WEIGHT'}
+            onClick={() => updateForm({ goal: 'GAIN_WEIGHT' })}
+          />
+          <OptionCard
+            title="Body Recomposition"
+            icon={<PersonStanding size={32} />}
+            isSelected={formData.goal === 'RECOMPOSITION'}
+            onClick={() => updateForm({ goal: 'RECOMPOSITION' })}
+          />
+        </div>
+      )
+    },
+    {
+      title: "Desired Pace",
+      description: "Weekly progress goal.",
+      fields: (
+        <div className="grid grid-cols-2 gap-4 pt-4">
+          <OptionCard
+            title="0.25"
+            subtitle="kg / week"
+            icon={<Turtle size={32} />}
+            isSelected={formData.weeklyGoal === 0.25}
+            onClick={() => updateForm({ weeklyGoal: 0.25 })}
+          />
+          <OptionCard
+            title="0.5"
+            subtitle="kg / week"
+            icon={<Rabbit size={32} />}
+            isSelected={formData.weeklyGoal === 0.5}
+            onClick={() => updateForm({ weeklyGoal: 0.5 })}
+          />
+          <OptionCard
+            title="0.75"
+            subtitle="kg / week"
+            icon={<Timer size={32} />}
+            isSelected={formData.weeklyGoal === 0.75}
+            onClick={() => updateForm({ weeklyGoal: 0.75 })}
+          />
+          <OptionCard
+            title="1"
+            subtitle="kg / week"
+            icon={<Rocket size={32} />}
+            isSelected={formData.weeklyGoal === 1.0}
+            onClick={() => updateForm({ weeklyGoal: 1.0 })}
+          />
+        </div>
+      )
+    },
+    {
+      title: "Activity Level",
+      description: "How active are you?",
+      fields: (
+        <div className="grid grid-cols-2 gap-4 pt-4">
+          <OptionCard
+            title="Sedentary"
+            subtitle="Little or no exercise"
+            icon={<User size={32} />}
+            isSelected={formData.activityLevel === 'SEDENTARY'}
+            onClick={() => updateForm({ activityLevel: 'SEDENTARY' })}
+          />
+          <OptionCard
+            title="Light"
+            subtitle="1-3 days/week"
+            icon={<Activity size={32} />}
+            isSelected={formData.activityLevel === 'LIGHTLY_ACTIVE'}
+            onClick={() => updateForm({ activityLevel: 'LIGHTLY_ACTIVE' })}
+          />
+          <OptionCard
+            title="Moderate"
+            subtitle="3-5 days/week"
+            icon={<Activity size={32} />}
+            isSelected={formData.activityLevel === 'MODERATELY_ACTIVE'}
+            onClick={() => updateForm({ activityLevel: 'MODERATELY_ACTIVE' })}
+          />
+          <OptionCard
+            title="Very"
+            subtitle="6-7 days/week"
+            icon={<Dumbbell size={32} />}
+            isSelected={formData.activityLevel === 'VERY_ACTIVE'}
+            onClick={() => updateForm({ activityLevel: 'VERY_ACTIVE' })}
+          />
+          <div className="col-span-2 flex justify-center">
+             <div className="w-1/2">
+               <OptionCard
+                 title="Extra"
+                 subtitle="Hard physical job/training"
+                 icon={<Flame size={32} />}
+                 isSelected={formData.activityLevel === 'EXTRA_ACTIVE'}
+                 onClick={() => updateForm({ activityLevel: 'EXTRA_ACTIVE' })}
+               />
+             </div>
           </div>
         </div>
       )
     },
     {
-      title: t('welcome.pro.title', 'Upgrade to DietinPro'),
-      description: t('welcome.pro.desc', 'Experience fitness at its finest'),
+      title: "Training",
+      description: "Weekly workouts?",
       fields: (
-        <div className="space-y-6">
-          {/* Premium Features */}
-          <div className="grid gap-4">
-            {[
-              {
-                id: 'AI_COACH',
-                label: t('welcome.pro.features.aiCoach.label', 'AI Nutrition Coach'),
-                desc: t('welcome.pro.features.aiCoach.desc', 'Get personalized meal plans and real-time guidance'),
-                icon: Bot,
-                highlight: t('welcome.pro.features.aiCoach.highlight', 'Most Popular')
-              },
-              {
-                id: 'PREMIUM_RECIPES',
-                label: t('welcome.pro.features.premiumRecipes.label', 'Premium Recipes'),
-                desc: t('welcome.pro.features.premiumRecipes.desc', 'Access exclusive healthy and delicious recipes'),
-                icon: Apple,
-                highlight: t('welcome.pro.features.premiumRecipes.highlight', 'New')
-              },
-              {
-                id: 'ADVANCED_TRACKING',
-                label: t('welcome.pro.features.advancedAnalytics.label', 'Advanced Analytics'),
-                desc: t('welcome.pro.features.advancedAnalytics.desc', 'Detailed insights and progress tracking'),
-                icon: LineChart,
-                highlight: t('welcome.pro.features.advancedAnalytics.highlight', 'Pro')
-              },
-              {
-                id: 'MEAL_PLANNER',
-                label: t('welcome.pro.features.mealPlanner.label', 'Smart Meal Planner'),
-                desc: t('welcome.pro.features.mealPlanner.desc', 'AI-powered meal planning and optimization'),
-                icon: Calendar,
-                highlight: t('welcome.pro.features.mealPlanner.highlight', 'Premium')
-              }
-            ].map((feature) => (
-              <div
-                key={feature.id}
-                className="group relative w-full px-6 py-5 rounded-2xl bg-white text-black shadow-md hover:shadow-xl transition-all duration-300 hover:scale-[1.02] cursor-pointer border border-black/5"
-              >
-                <div className="absolute -top-2 -right-1">
-                  <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-gradient-to-r from-black to-gray-700 text-white">
-                    {feature.highlight}
-                  </span>
-                </div>
-                <div className="flex items-center gap-4">
-                  <div className="w-12 h-12 rounded-xl flex items-center justify-center flex-shrink-0 bg-black/5">
-                    <feature.icon className="w-6 h-6 text-black" />
-                  </div>
-                  <div className="flex-1">
-                    <h3 className="font-semibold text-black group-hover:text-black/80 transition-colors">{feature.label}</h3>
-                    <p className="text-sm text-black/60 group-hover:text-black/70 transition-colors">{feature.desc}</p>
-                  </div>
-                </div>
-              </div>
-            ))}
-          </div>
-
-          {/* Premium Pricing Card */}
-          <div className="mt-8">
-            <div className="relative overflow-hidden rounded-3xl bg-gradient-to-br from-[#1a1a1a] to-[#2a2a2a] p-8 shadow-2xl">
-              <div className="absolute top-0 right-0 -mt-10 -mr-10 h-32 w-32 rounded-full bg-gradient-to-br from-indigo-400 to-indigo-600 opacity-20 blur-2xl"></div>
-
-              <div className="relative">
-                <div className="flex items-center justify-between mb-6">
-                  <div>
-                    <h3 className="text-2xl font-bold text-white">{t('welcome.pro.card.title', 'DietinPro')}</h3>
-                    <p className="text-sm text-white/60">{t('welcome.pro.card.subtitle', 'Unlock your full potential')}</p>
-                  </div>
-                  <div className="text-right">
-                    <div className="flex items-baseline gap-1 justify-end">
-                      <span className="text-3xl font-bold text-white">$8.99</span>
-                      <span className="text-sm text-white/60">{t('welcome.pro.card.perMonth', '/month')}</span>
-                    </div>
-                  </div>
-                </div>
-
-                <div className="space-y-4 mb-8">
-                  {[
-                    t('welcome.pro.card.benefits.aiAnalysis', '✨ Unlimited AI meal analysis'),
-                    t('welcome.pro.card.benefits.workoutPlans', '🎯 Personalized workout plans'),
-                    t('welcome.pro.card.benefits.premiumAccess', '🔒 Premium features access'),
-                    t('welcome.pro.card.benefits.nutritionGuidance', '💪 Expert nutrition guidance')
-                  ].map((benefit, index) => (
-                    <div key={index} className="flex items-center gap-3 text-white/80">
-                      <span>{benefit}</span>
-                    </div>
-                  ))}
-                </div>
-
-                <button
-                  onClick={() => {
-                    setIsProPanelOpen(true);
-                  }}
-                  className="w-full bg-gradient-to-r from-indigo-500 via-indigo-600 to-indigo-700 text-white px-6 py-4 rounded-xl font-semibold hover:opacity-90 transition-all duration-300 shadow-lg hover:shadow-xl transform hover:scale-[1.02] active:scale-[0.98]"
-                >
-                  {t('welcome.pro.card.cta', 'Get Started with Pro')}
-                </button>
-
-                <p className="text-xs text-center text-white/40 mt-4">
-                  {t('welcome.pro.card.noRefund', 'No refund')}
-                </p>
-              </div>
-            </div>
+        <div className="grid grid-cols-2 gap-4 pt-4">
+          <OptionCard
+            title="None"
+            icon={<User size={32} />}
+            isSelected={formData.workoutDays === 0}
+            onClick={() => updateForm({ workoutDays: 0 })}
+          />
+          <OptionCard
+            title="1-2"
+            subtitle="/ week"
+            icon={<Calendar size={32} />}
+            isSelected={formData.workoutDays === 2}
+            onClick={() => updateForm({ workoutDays: 2 })}
+          />
+          <OptionCard
+            title="3-4"
+            subtitle="/ week"
+            icon={<Calendar size={32} />}
+            isSelected={formData.workoutDays === 4}
+            onClick={() => updateForm({ workoutDays: 4 })}
+          />
+          <OptionCard
+            title="5+"
+            subtitle="/ week"
+            icon={<Calendar size={32} />}
+            isSelected={formData.workoutDays === 5}
+            onClick={() => updateForm({ workoutDays: 5 })}
+          />
+          <div className="col-span-2 flex justify-center">
+             <div className="w-1/2">
+               <OptionCard
+                 title="Daily"
+                 icon={<Calendar size={32} />}
+                 isSelected={formData.workoutDays === 7}
+                 onClick={() => updateForm({ workoutDays: 7 })}
+               />
+             </div>
           </div>
         </div>
       )
     },
     {
-      title: t('welcome.aiAnalysis.title', 'AI Analysis'),
-      description: t('welcome.aiAnalysis.desc', 'Our AI is analyzing your profile'),
+      title: "Diet Type",
+      description: "Restrictions?",
       fields: (
-        <div className="flex flex-col items-center justify-center min-h-[300px] space-y-6">
-          <div className="w-16 h-16 border-4 border-black/10 border-t-black rounded-full animate-spin" />
-          <p className="text-lg font-medium text-black">{t('welcome.aiAnalysis.loading', 'Analyzing your profile...')}</p>
+        <div className="grid grid-cols-2 gap-4 pt-4">
+          <OptionCard
+            title="Balanced"
+            icon={<Apple size={32} />}
+            isSelected={formData.diet === 'BALANCED'}
+            onClick={() => updateForm({ diet: 'BALANCED' })}
+          />
+          <OptionCard
+            title="Keto"
+            icon={<Egg size={32} />}
+            isSelected={formData.diet === 'KETO'}
+            onClick={() => updateForm({ diet: 'KETO' })}
+          />
+          <div className="col-span-2 flex justify-center">
+             <div className="w-1/2">
+               <OptionCard
+                 title="Vegan"
+                 icon={<Leaf size={32} />}
+                 isSelected={formData.diet === 'VEGAN'}
+                 onClick={() => updateForm({ diet: 'VEGAN' })}
+               />
+             </div>
+          </div>
         </div>
       )
     },
     {
-      title: t('welcome.ready.title', 'Ready to Begin'),
-      description: t('welcome.ready.desc', "Let's start your fitness journey"),
+      title: "Health",
+      description: "Any injuries?",
       fields: (
-        <div className="space-y-8">
-          {/* AI Analysis Results */}
-          <div className="grid grid-cols-2 gap-4">
-            <div className="bg-white rounded-2xl p-4 shadow-md">
-              <p className="text-sm text-black/60 mb-2">{t('welcome.ready.metrics.metabolism', 'Your Metabolism')}</p>
-              <p className="text-2xl font-bold text-black">{aiResult?.metabolism} cal</p>
-            </div>
-            <div className="bg-white rounded-2xl p-4 shadow-md">
-              <p className="text-sm text-black/60 mb-2">{t('welcome.ready.metrics.calories', 'Daily Calories')}</p>
-              <p className="text-2xl font-bold text-black">{aiResult?.calories} cal</p>
-            </div>
-          </div>
-
-          {/* Macronutrients */}
-          <div className="grid grid-cols-3 gap-4">
-            <div className="bg-white rounded-2xl p-4 shadow-md">
-              <div className="flex items-center gap-2">
-                <div className="w-8 h-8 rounded-lg bg-blue-500/20 flex items-center justify-center">
-                  🥩
-                </div>
-                <div>
-                  <p className="text-sm text-black/60">{t('welcome.ready.macros.protein', 'Protein')}</p>
-                  <p className="text-xl font-bold text-black">{aiResult?.protein}g</p>
-                </div>
-              </div>
-            </div>
-            <div className="bg-white rounded-2xl p-4 shadow-md">
-              <div className="flex items-center gap-2">
-                <div className="w-8 h-8 rounded-lg bg-green-500/20 flex items-center justify-center">
-                  🌾
-                </div>
-                <div>
-                  <p className="text-sm text-black/60">{t('welcome.ready.macros.carbs', 'Carbs')}</p>
-                  <p className="text-xl font-bold text-black">{aiResult?.carbs}g</p>
-                </div>
-              </div>
-            </div>
-            <div className="bg-white rounded-2xl p-4 shadow-md">
-              <div className="flex items-center gap-2">
-                <div className="w-8 h-8 rounded-lg bg-yellow-500/20 flex items-center justify-center">
-                  🥑
-                </div>
-                <div>
-                  <p className="text-sm text-black/60">{t('welcome.ready.macros.fat', 'Fat')}</p>
-                  <p className="text-xl font-bold text-black">{aiResult?.fat}g</p>
-                </div>
-              </div>
-            </div>
-          </div>
-
-          {/* Weight Progress Chart */}
-          <div className="bg-white rounded-2xl p-6 space-y-4 shadow-md">
-            <h4 className="font-bold text-lg text-black">{t('welcome.ready.chart.title', 'Estimated Progress Timeline')}</h4>
-            <div className="relative h-[200px]">
-              <Line
-                data={{
-                  labels: Array.from({ length: 12 }, (_, i) => t('welcome.ready.chart.weekLabel', 'Week {{num}}', { num: i + 1 })),
-                  datasets: [
-                    {
-                      label: t('welcome.ready.chart.withDietin', 'With Dietin'),
-                      data: Array.from({ length: 12 }, (_, i) => {
-                        const weeklyChange = formData.weeklyGoal || 0;
-                        const direction = formData.targetWeight < formData.weight ? -1 : 1;
-                        return formData.weight + (weeklyChange * direction * (i + 1));
-                      }),
-                      borderColor: 'rgba(37, 99, 235, 1)',
-                      backgroundColor: 'rgba(37, 99, 235, 0.1)',
-                      fill: true,
-                      tension: 0.4
-                    },
-                    {
-                      label: t('welcome.ready.chart.withoutGuidance', 'Without Guidance'),
-                      data: Array.from({ length: 12 }, (_, i) => {
-                        const weeklyChange = (formData.weeklyGoal || 0) * 0.4;
-                        const direction = formData.targetWeight < formData.weight ? -1 : 1;
-                        const progress = formData.weight + (weeklyChange * direction * (i + 1));
-                        // Add some fluctuation
-                        return progress + (Math.sin(i) * weeklyChange * 2);
-                      }),
-                      borderColor: 'rgba(156, 163, 175, 1)',
-                      backgroundColor: 'rgba(156, 163, 175, 0.1)',
-                      borderDash: [5, 5],
-                      fill: true,
-                      tension: 0.2
-                    }
-                  ]
-                }}
-                options={{
-                  responsive: true,
-                  maintainAspectRatio: false,
-                  plugins: {
-                    legend: {
-                      position: 'top' as const,
-                      labels: {
-                        boxWidth: 10,
-                        usePointStyle: true,
-                        pointStyle: 'circle',
-                        color: 'rgba(0, 0, 0, 0.8)'
-                      }
-                    }
-                  },
-                  scales: {
-                    y: {
-                      title: {
-                        display: true,
-                        text: useMetric ? t('welcome.ready.chart.weightKg', 'Weight (kg)') : t('welcome.ready.chart.weightLbs', 'Weight (lbs)'),
-                        color: 'rgba(0, 0, 0, 0.8)'
-                      },
-                      ticks: {
-                        callback: (value) => `${Math.round(value as number)}`,
-                        color: 'rgba(0, 0, 0, 0.6)'
-                      },
-                      grid: {
-                        color: 'rgba(0, 0, 0, 0.1)'
-                      }
-                    },
-                    x: {
-                      ticks: {
-                        color: 'rgba(0, 0, 0, 0.6)'
-                      },
-                      grid: {
-                        color: 'rgba(0, 0, 0, 0.1)'
-                      }
-                    }
-                  }
-                }}
-              />
-            </div>
-            <div className="text-sm text-black/60 mt-2">
-              {t('welcome.ready.chart.note', 'Projected timeline based on your goals and commitment')}
-            </div>
-          </div>
-
-          {/* AI Goals Summary */}
-          <div className="bg-white rounded-2xl p-6 space-y-4 shadow-md">
-            <h4 className="font-bold text-lg text-black">{t('welcome.ready.summary.title', 'Your Personalized Goals')}</h4>
-            <div className="space-y-3">
-              <div className="flex items-center gap-3">
-                <div className="w-8 h-8 rounded-full bg-blue-500/20 flex items-center justify-center">
-                  <Target className="w-5 h-5 text-blue-400" />
-                </div>
-                <div>
-                  <p className="font-medium text-black">{t('welcome.ready.summary.targetWeight', 'Target Weight')}</p>
-                  <p className="text-sm text-black/60">{formData.targetWeight} {useMetric ? t('welcome.targetWeight.unitKg', 'kg') : t('welcome.targetWeight.unitLbs', 'lbs')}</p>
-                </div>
-              </div>
-              <div className="flex items-center gap-3">
-                <div className="w-8 h-8 rounded-full bg-green-500/20 flex items-center justify-center">
-                  <Activity className="w-5 h-5 text-green-400" />
-                </div>
-                <div>
-                  <p className="font-medium text-black">{t('welcome.ready.summary.weeklyGoal', 'Weekly Goal')}</p>
-                  <p className="text-sm text-black/60">{formData.weeklyGoal} {useMetric ? t('welcome.targetWeight.unitKg', 'kg') : t('welcome.targetWeight.unitLbs', 'lbs')} {t('welcome.ready.summary.perWeek', 'per week')}</p>
-                </div>
-              </div>
-              <div className="flex items-center gap-3">
-                <div className="w-8 h-8 rounded-full bg-purple-500/20 flex items-center justify-center">
-                  <Calendar className="w-5 h-5 text-purple-400" />
-                </div>
-                <div>
-                  <p className="font-medium text-black">{t('welcome.ready.summary.estimatedTimeline', 'Estimated Timeline')}</p>
-                  <div className="text-sm text-black/60">
-                    <p>{t('welcome.ready.summary.basedOnWeekly', 'Based on weekly goal: {{weeks}} weeks', { weeks: Math.abs(Math.ceil((formData.targetWeight - formData.weight) / formData.weeklyGoal)) })}</p>
-                    {aiResult?.estimatedWeeks && (
-                      <p className="mt-1">{t('welcome.ready.summary.aiRecommendation', 'AI recommendation: {{weeks}} weeks', { weeks: aiResult.estimatedWeeks })}</p>
-                    )}
-                  </div>
-                </div>
-              </div>
-            </div>
-          </div>
-
-          {/* Get Started Button */}
-          <button
-            onClick={handleGetStarted}
-            disabled={isLoading}
-            className="w-full bg-black text-white px-6 py-4 rounded-2xl font-['SF Pro Display'] hover:bg-black/90 transition-colors relative overflow-hidden"
+        <div className="grid grid-cols-2 gap-4 pt-4">
+          <OptionCard
+            title="None"
+            icon={<Check size={32} />}
+            isSelected={formData.injuries?.length === 0}
+            onClick={() => updateForm({ injuries: [] })}
+          />
+          <OptionCard
+            title="Knee Issue"
+            icon={<PersonStanding size={32} />}
+            isSelected={formData.injuries?.includes('KNEE')}
+            onClick={() => {
+               const inj = formData.injuries || [];
+               updateForm({ injuries: inj.includes('KNEE') ? inj.filter((i:any) => i !== 'KNEE') : [...inj, 'KNEE'] });
+            }}
+          />
+          <OptionCard
+            title="Back Issue"
+            icon={<Users size={32} />}
+            isSelected={formData.injuries?.includes('BACK')}
+            onClick={() => {
+               const inj = formData.injuries || [];
+               updateForm({ injuries: inj.includes('BACK') ? inj.filter((i:any) => i !== 'BACK') : [...inj, 'BACK'] });
+            }}
+          />
+          <OptionCard
+            title="Other"
+            icon={<MoreHorizontal size={32} />}
+            isSelected={formData.injuries?.includes('OTHER')}
+            onClick={() => {
+               const inj = formData.injuries || [];
+               updateForm({ injuries: inj.includes('OTHER') ? inj.filter((i:any) => i !== 'OTHER') : [...inj, 'OTHER'] });
+            }}
+          />
+        </div>
+      )
+    },
+    {
+      title: "Upgrade to DietinPro",
+      description: "Unlock premium AI features and advanced tracking.",
+      fields: (
+        <div className="mt-4">
+          <ProSubscriptionPanel />
+          <button 
+            className="w-full text-center text-[#7a7d85] font-bold mt-4 py-2 hover:text-[#1a1f2e] transition-colors"
+            onClick={handleNext}
           >
-            {isLoading ? (
-              <div className="flex items-center justify-center gap-2">
-                <div className="w-5 h-5 border-2 border-white/20 border-t-white rounded-full animate-spin" />
-                <span>{t('welcome.ready.loading', 'Setting up your profile...')}</span>
-              </div>
-            ) : (
-              t('welcome.ready.cta', "Let's get started!")
-            )}
+            Skip for now
           </button>
         </div>
       )
     },
+    {
+      title: "",
+      description: "",
+      fields: (
+        <div className="flex flex-col items-center justify-center py-20 text-center">
+          <motion.div
+            animate={{ rotate: 360 }}
+            transition={{ repeat: Infinity, duration: 2, ease: "linear" }}
+            className="mb-8"
+          >
+            <Bot size={64} className="text-[#1c2333]" />
+          </motion.div>
+          <motion.p
+            key={currentAiText}
+            initial={{ opacity: 0, y: 10 }}
+            animate={{ opacity: 1, y: 0 }}
+            exit={{ opacity: 0, y: -10 }}
+            className="text-2xl font-bold text-[#1a1f2e]"
+          >
+            {getAiText()}
+          </motion.p>
+          <div className="mt-12 flex space-x-2">
+            {[0, 1, 2].map((i) => (
+              <motion.div
+                key={i}
+                animate={{ scale: currentAiText === i ? 1.5 : 1, opacity: currentAiText >= i ? 1 : 0.3 }}
+                className="w-2 h-2 rounded-full bg-[#1c2333]"
+              />
+            ))}
+          </div>
+        </div>
+      )
+    },
+    {
+      title: "Summary",
+      description: "Your personalized plan:",
+      fields: (
+        <div className="space-y-4 pt-4">
+          <div className="bg-white rounded-3xl p-6 shadow-[0_4px_20px_rgb(0,0,0,0.04)] border border-gray-100 flex flex-col items-center">
+            <div className="flex items-center gap-2 text-[#7a7d85] font-bold text-xs tracking-wider mb-2">
+              <Flame size={16} className="text-blue-500" /> DAILY CALORIES
+            </div>
+            <div className="text-5xl font-extrabold text-[#1a1f2e] mb-1">
+              {aiResult?.calories || 2000} <span className="text-xl font-bold text-[#7a7d85]">kcal</span>
+            </div>
+            <div className="h-[1px] w-full bg-gray-100 my-4" />
+            <div className="text-center text-sm text-[#7a7d85]">
+              Based on your {formData.goal?.replace('_', ' ').toLowerCase() || 'Maintenance'} goal and {formData.activityLevel?.replace('_', ' ').toLowerCase() || 'Moderate'} activity.
+            </div>
+          </div>
+          
+          <div className="grid grid-cols-2 gap-4">
+            <div className="bg-white rounded-3xl p-6 shadow-[0_4px_20px_rgb(0,0,0,0.04)] border border-gray-100 flex flex-col items-center justify-center">
+              <div className="text-[#7a7d85] font-bold text-xs tracking-wider mb-1">BMI</div>
+              <div className="text-2xl font-extrabold text-[#1a1f2e]">{aiResult?.bmi || 22.7}</div>
+            </div>
+            <div className="bg-white rounded-3xl p-6 shadow-[0_4px_20px_rgb(0,0,0,0.04)] border border-gray-100 flex flex-col items-center justify-center">
+              <div className="text-[#7a7d85] font-bold text-xs tracking-wider mb-1">BMR</div>
+              <div className="text-2xl font-extrabold text-[#1a1f2e]">{aiResult?.metabolism || 1659}</div>
+            </div>
+            <div className="bg-white rounded-3xl p-6 shadow-[0_4px_20px_rgb(0,0,0,0.04)] border border-gray-100 flex flex-col items-center justify-center">
+              <div className="text-[#7a7d85] font-bold text-xs tracking-wider mb-1">TDEE</div>
+              <div className="text-2xl font-extrabold text-[#1a1f2e]">{aiResult?.calories || 3152}</div>
+            </div>
+            <div className="bg-pink-50 rounded-3xl p-6 flex flex-col items-center justify-center border border-pink-100">
+              <div className="flex items-center gap-1 text-blue-500 font-bold text-xs tracking-wider mb-1">
+                <Flame size={14} /> DAILY BURN
+              </div>
+              <div className="text-2xl font-extrabold text-blue-500">{Math.round((aiResult?.calories || 3152) - (aiResult?.metabolism || 1659))} <span className="text-sm">cal</span></div>
+            </div>
+          </div>
+        </div>
+      )
+    }
   ];
 
-  useEffect(() => {
-    if (aiStepReady && step === steps.length - 2) {
-      const showNextText = () => {
-        setIsVisible(false);
-
-        setTimeout(() => {
-          setCurrentAiText(prev => {
-            const nextText = prev + 1;
-            if (nextText <= 3) {
-              setIsVisible(true);
-            }
-            if (nextText === 3) {
-              setTimeout(() => {
-                handleNext();
-              }, 3000);
-            }
-            return nextText;
-          });
-        }, 2000);
-      };
-
-      const textTimeout = setTimeout(showNextText, 2750);
-      return () => clearTimeout(textTimeout);
-    }
-  }, [aiStepReady, step, currentAiText]);
-
-  if (step === 0) {
+  if (step === -1) {
     return (
       <IntroStep
         onComplete={() => {
-          setStep(1);
+          setStep(0);
         }}
       />
     );
   }
 
-  const activityLevels: ActivityLevel[] = ['LIGHTLY_ACTIVE', 'MODERATELY_ACTIVE', 'VERY_ACTIVE', 'EXTRA_ACTIVE'];
+  const activityLevels: ActivityLevel[] = ['SEDENTARY', 'LIGHTLY_ACTIVE', 'MODERATELY_ACTIVE', 'VERY_ACTIVE', 'EXTRA_ACTIVE'] as any;
   const experienceLevels: ExperienceLevel[] = ['BEGINNER', 'INTERMEDIATE', 'ADVANCED'];
-  const workoutDays: WorkoutDays[] = [2, 3, 4, 5, 6] as const;
+  const workoutDays: WorkoutDays[] = [0, 2, 3, 4, 5, 6, 7] as any;
   const genders: Gender[] = ['MALE', 'FEMALE'];
   const budgetOptions: Budget[] = ['BASIC', 'STANDARD', 'PREMIUM'];
 
@@ -1928,24 +1326,20 @@ export function Welcome() {
       initial={{ opacity: 1 }}
       animate={{ opacity: isFadingOut ? 0 : 1 }}
       transition={{ duration: 0.5 }}
-      className="fixed inset-0 bg-gradient-to-b from-[#FAFAFA] from-0% via-[#F8F8F8] via-30% via-[#F5F5F5] via-60% to-[#F0F0F0] to-100% text-black px-5 py-8 font-['SF Pro Display'] overflow-y-auto overscroll-none"
+      className="fixed inset-0 bg-white text-[#1a1f2e] font-['SF Pro Display'] overflow-y-auto overscroll-none"
       style={{ overscrollBehavior: 'none' }}
     >
-      {/* Language Switcher - opposite corner from Back, Y-aligned to avoid overlap */}
-      <div
-        className={cn(
-          'fixed z-50 top-8',
-          isRTL ? 'left-5' : 'right-5'
-        )}
-      >
-        <LanguageSwitcher />
-      </div>
-      {/* Top Progress Bar */}
-      <div className="fixed top-0 left-0 right-0 h-1 bg-black/5">
-        <div
-          className="h-full bg-black transition-all duration-300"
-          style={{ width: `${progress}%` }}
-        />
+      <div className="max-w-md mx-auto px-6 py-6 pb-32 min-h-full relative">
+      <div className="flex items-center justify-between mb-8 mt-2">
+        <button onClick={prevStep} className="w-10 h-10 flex items-center justify-center rounded-full bg-[#f3f4f6]">
+          <ChevronLeft size={20} className="text-[#1a1f2e]" />
+        </button>
+        <div className="flex-1 mx-4 h-1.5 bg-[#f3f4f6] rounded-full overflow-hidden">
+          <div className="h-full bg-[#3b82f6] transition-all duration-300" style={{ width: `${progress}%` }} />
+        </div>
+        <button className="w-10 h-10 flex items-center justify-center rounded-full bg-[#f3f4f6]">
+          <MoreHorizontal size={20} className="text-[#1a1f2e]" />
+        </button>
       </div>
 
       {/* Back Button */}
@@ -2010,6 +1404,20 @@ export function Welcome() {
               </button>
             )}
 
+            {step === steps.length - 1 && (
+              <button
+                onClick={handleGetStarted}
+                disabled={isLoading}
+                className="w-full px-6 py-4 rounded-2xl font-medium transition-all duration-300 bg-black text-white hover:bg-black/90 flex justify-center items-center gap-2"
+              >
+                {isLoading ? (
+                  <span className="w-5 h-5 border-2 border-white/30 border-t-white rounded-full animate-spin" />
+                ) : (
+                  t('welcome.cta.getStarted', 'Get Started')
+                )}
+              </button>
+            )}
+
             {/* Sign out button only on first step after intro */}
             {step === 1 && (
               <button
@@ -2031,6 +1439,13 @@ export function Welcome() {
         isOpen={isProPanelOpen}
         onClose={() => setIsProPanelOpen(false)}
       />
+      
+      <HealthDisclaimerModal
+        isOpen={showHealthDisclaimer}
+        onClose={() => setShowHealthDisclaimer(false)}
+        onAgree={() => navigate('/home')}
+      />
+      </div>
     </motion.div>
   );
 }

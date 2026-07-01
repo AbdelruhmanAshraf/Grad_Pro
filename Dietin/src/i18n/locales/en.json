@@ -1711,5 +1711,17 @@
     "locked": {
       "desc": "Please subscribe to Pro to unlock this feature."
     }
+  },
+  "onboarding": {
+    "slide1_title": "Welcome",
+    "slide1_subtitle": "your fitness and nutrition companion",
+    "slide2_title": "Track progress",
+    "slide2_subtitle": "Work out meals and insights",
+    "slide3_title": "Personalized plan",
+    "slide3_subtitle": "Customized diet and workout plan",
+    "slide4_title": "Achieve your goals",
+    "slide4_subtitle": "Stay motivated and achieve your goals",
+    "continue": "Continue",
+    "get_started": "Get Started"
   }
 }

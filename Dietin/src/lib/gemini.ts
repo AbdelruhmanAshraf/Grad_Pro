@@ -1,74 +1,21 @@
+import { GoogleGenerativeAI } from "@google/generative-ai";
 import { UserProfile, Goal } from './types';
 import { computeProfileAnalysis } from './calculations';
 import { useUserStore } from "@/stores/userStore";
 import { auth, db } from "@/lib/firebase";
 import { doc, getDoc } from "firebase/firestore";
-import OpenAI from 'openai';
 
-const getOpenAIClient = () => {
-  const apiKey = import.meta.env.VITE_DO_AGENT_KEY;
-  const baseURL = import.meta.env.VITE_DO_AGENT_ENDPOINT || "https://korrm3fv7tsamkjl77wwkrbb.agents.do-ai.run/api/v1";
-  
+const getGeminiClient = () => {
+  const apiKey = import.meta.env.VITE_GEMINI_API_KEY;
   if (!apiKey) {
-    throw new Error('DO Agent key is missing in .env');
+    throw new Error('VITE_GEMINI_API_KEY is missing in .env');
   }
-
-  return new OpenAI({
-    apiKey,
-    baseURL,
-    dangerouslyAllowBrowser: true, // Required for running in the browser
-  });
+  return new GoogleGenerativeAI(apiKey);
 };
 
 export const genAI = {
   getGenerativeModel: ({ model }: { model: string }) => {
-    return {
-      generateContent: async (input: any) => {
-        const openai = getOpenAIClient();
-        let prompt = "";
-        let base64Image = "";
-        let mimeType = "";
-        
-        const content = input.contents?.[0] || input;
-        const parts = content.parts || (Array.isArray(content) ? content : []);
-        
-        for (const part of parts) {
-          if (part.text) prompt = part.text;
-          if (part.inlineData) {
-            base64Image = part.inlineData.data;
-            mimeType = part.inlineData.mimeType;
-          }
-        }
-        
-        if (typeof input === 'string') prompt = input;
-
-        const messages: OpenAI.Chat.Completions.ChatCompletionMessageParam[] = [];
-        
-        if (base64Image) {
-          const formattedBase64 = base64Image.includes('base64,') ? base64Image : `data:${mimeType};base64,${base64Image}`;
-          messages.push({
-            role: "user",
-            content: [
-              { type: "text", text: prompt },
-              { type: "image_url", image_url: { url: formattedBase64 } }
-            ]
-          });
-        } else {
-          messages.push({ role: "user", content: prompt });
-        }
-
-        const response = await openai.chat.completions.create({
-          model: "kimi-k2.5",
-          messages
-        });
-
-        return {
-          response: {
-            text: () => response.choices[0]?.message?.content || ""
-          }
-        };
-      }
-    };
+    return getGeminiClient().getGenerativeModel({ model });
   }
 };
 

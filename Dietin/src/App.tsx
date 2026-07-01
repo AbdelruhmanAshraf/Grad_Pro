@@ -424,7 +424,7 @@ function AppContent() {
   // Gate removed
 
   if (!user && protectedPaths.includes(location.pathname)) {
-    return <Navigate to="/login-prompt" replace />;
+    return <Navigate to="/auth" replace />;
   }
 
   if (user && authOnlyPaths.includes(location.pathname)) {
@@ -473,8 +473,8 @@ function AppContent() {
                   } />
                   {/* Redirect legacy/missing login prompt route to the Auth page to prevent blank screens */}
                   <Route path="/login-prompt" element={<Navigate to="/auth" replace />} />
-                  {mounted && !location.pathname.includes('landing') && (
-                    <>
+                  {/* Core App Routes */}
+                  <>
                       <Route path="/home" element={
                         <AnimatedPage>
                           <Index />
@@ -553,8 +553,7 @@ function AppContent() {
                       } />
                       {/* Catch-all fallback to avoid unmatched-route blank screens */}
                       <Route path="*" element={<Navigate to="/home" replace />} />
-                    </>
-                  )}
+                  </>
                 </Routes>
               </AnimatePresence>
             </div>

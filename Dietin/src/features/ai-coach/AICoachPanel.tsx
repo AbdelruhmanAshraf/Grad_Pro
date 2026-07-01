@@ -48,7 +48,7 @@ export function AICoachPanel({ exercise, onRepDetected, compact }: AICoachPanelP
   useFrameLoop({
     videoRef,
     active: loopActive,
-    intervalMs: 250,
+    intervalMs: 200,
     quality: 0.5,
     maxEdge: 480,
     onFrame: async (dataUrl) => {

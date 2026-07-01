@@ -34,6 +34,7 @@ import ProSubscriptionPanel from "@/components/ProSubscriptionPanel";
 import NavHide from "@/components/NavHide";
 import ProFeatures from "@/components/ProFeatures";
 import { Link, useLocation, useNavigate } from "react-router-dom";
+import MealAnalysis from "../components/MealAnalysis";
 import { format } from "date-fns";
 // Removed unused UserProfile import to fix TS error
 import { useTranslation } from 'react-i18next';
@@ -151,6 +152,7 @@ const Diet = () => {
 
   const today = format(selectedDate, "yyyy-MM-dd");
   const [dailyData, setDailyData] = useState(getDailyCalories(today));
+  const [isMealAnalysisOpen, setIsMealAnalysisOpen] = useState(false);
 
   // Open Search panel automatically when navigated here from other pages via Plus -> Meal Analysis -> Search
   useEffect(() => {
@@ -695,7 +697,7 @@ const Diet = () => {
           <div className="flex items-center justify-between gap-2 mb-1">
             <Button
               className="w-full bg-white hover:bg-gray-50/95 shadow-[0_8px_30px_rgb(0,0,0,0.04)] hover:shadow-[0_8px_30px_rgb(0,0,0,0.06)] border border-gray-100 rounded-full px-5 py-3 flex items-center justify-center gap-2 transition-all duration-300"
-              onClick={() => navigate('/add-meal')}
+              onClick={() => setIsMealAnalysisOpen(true)}
             >
               <Plus className="h-4 w-4 text-gray-900" />
               <span className="text-sm font-medium text-gray-900">{t('diet.actions.addFood')}</span>
@@ -1436,6 +1438,7 @@ const Diet = () => {
           </>
         )}
       </AnimatePresence>
+      <MealAnalysis isOpen={isMealAnalysisOpen} onClose={() => setIsMealAnalysisOpen(false)} setIsSearchOpen={setIsSearchOpen} />
     </div>
   );
 };

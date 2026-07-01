@@ -152,13 +152,10 @@ export const Landing = () => {
         width: '100vw',
       }}
     >
-      {/* Background gradient to ensure pure white at bottom without showing App background */}
+      {/* Background to ensure pure white at bottom without showing App background */}
       <div
         aria-hidden
-        className="pointer-events-none fixed inset-0 z-0"
-        style={{
-          background: 'linear-gradient(to bottom, #fcfcfc 0%, #ffffff 40%, #ffffff 100%)',
-        }}
+        className="pointer-events-none fixed inset-0 z-0 bg-white"
       />
       {/* Status bar background for iOS safe area */}
       <TopStatusBackground />
@@ -265,20 +262,14 @@ export const Landing = () => {
         animate={{ opacity: 1 }}
         exit={{ opacity: 0 }}
         transition={{ duration: 0.3 }}
-        className="w-full bg-white rounded-t-[32px] px-6 py-6 relative z-20 bottom-panel"
+        className="w-full bg-white px-6 py-6 relative z-20 bottom-panel"
         style={{
           height: '100px',
           willChange: 'opacity',
           backfaceVisibility: 'hidden'
         }}
       >
-        {/* Top gradient overlay to ensure smooth blend into content while keeping bottom pure white */}
-        <div
-          className="pointer-events-none absolute -top-8 left-0 right-0 h-8 rounded-t-[32px]"
-          style={{
-            background: 'linear-gradient(to bottom, rgba(255,255,255,0) 0%, #ffffff 100%)'
-          }}
-        />
+
         <div className="max-w-[300px] mx-auto h-full flex items-center">
           <motion.button
             whileTap={{ scale: 0.98 }}

@@ -1,9 +1,9 @@
-export type ActivityLevel = 'LIGHTLY_ACTIVE' | 'MODERATELY_ACTIVE' | 'VERY_ACTIVE' | 'EXTRA_ACTIVE';
+export type ActivityLevel = 'SEDENTARY' | 'LIGHTLY_ACTIVE' | 'MODERATELY_ACTIVE' | 'VERY_ACTIVE' | 'EXTRA_ACTIVE';
 export type ExperienceLevel = 'BEGINNER' | 'INTERMEDIATE' | 'ADVANCED';
-export type WorkoutDays = 2 | 3 | 4 | 5 | 6;
+export type WorkoutDays = 0 | 2 | 3 | 4 | 5 | 6 | 7;
 export type Gender = 'MALE' | 'FEMALE' | 'OTHER';
 export type Budget = 'BASIC' | 'STANDARD' | 'PREMIUM';
-export type DietType = 'CLASSIC' | 'PESCATARIAN' | 'VEGETARIAN' | 'VEGAN';
+export type DietType = 'BALANCED' | 'KETO' | 'VEGAN' | 'CLASSIC' | 'PESCATARIAN' | 'VEGETARIAN';
 export type Source = 'INSTAGRAM' | 'FACEBOOK' | 'TIKTOK' | 'YOUTUBE' | 'GOOGLE' | 'TV' | 'FRIEND';
 export type Goal = 'LOSE_WEIGHT' | 'LOSE_FAT' | 'RECOMPOSITION' | 'MAINTAIN_HEALTH' | 'MAINTAIN_ATHLETIC' | 'GAIN_MUSCLE' | 'GAIN_WEIGHT';
 export type Obstacle = 'CONSISTENCY' | 'EATING' | 'SUPPORT' | 'SCHEDULE' | 'INSPIRATION';

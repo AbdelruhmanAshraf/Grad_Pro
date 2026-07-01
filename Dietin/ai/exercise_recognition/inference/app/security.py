@@ -142,7 +142,7 @@ class RateLimiter:
         self._users: Dict[str, Dict[str, _Bucket]] = {}
         self._defaults = {
             "frame": (float(os.getenv("AI_RATE_FRAME_WINDOW", "30")),
-                      int(os.getenv("AI_RATE_FRAME_LIMIT", "60"))),
+                      int(os.getenv("AI_RATE_FRAME_LIMIT", "300"))),
             "session": (float(os.getenv("AI_RATE_SESSION_WINDOW", "60")),
                         int(os.getenv("AI_RATE_SESSION_LIMIT", "30"))),
         }

@@ -6,7 +6,8 @@ import { auth, db, tryReconnect } from "@/lib/firebase";
 import { signInWithCustomToken, sendPasswordResetEmail, createUserWithEmailAndPassword, signInWithEmailAndPassword, sendEmailVerification, reload, signInWithCredential, GoogleAuthProvider, signInWithPopup } from "firebase/auth";
 import { doc, getDoc, setDoc, updateDoc, collection, query, where, limit as fblimit, getDocs } from "firebase/firestore";
 import { toast } from "@/components/ui/use-toast";
-import { Loader2, ArrowLeft } from "lucide-react";
+import { Loader2, ArrowLeft, RefreshCw, MoreHorizontal } from "lucide-react";
+import { Sheet, SheetContent, SheetTrigger, SheetHeader, SheetTitle } from '@/components/ui/sheet';
 import { FcGoogle } from 'react-icons/fc';
 import { FaEnvelope } from 'react-icons/fa';
 import { useRotatingText } from "@/hooks/useRotatingText";
@@ -15,6 +16,61 @@ import { useTranslation } from 'react-i18next';
 import ShapesTrio from '@/assets/Vectors/20250831_0538_Cheerful Shapes Trio_remix_01k3yzrkpee20vrmzy5m9xxnmv.png';
 import { Capacitor } from '@capacitor/core';
 import { FirebaseAuthentication } from '@capacitor-firebase/authentication';
+
+const TYPING_SPEED = 50;
+const DELETING_SPEED = 30;
+const PAUSE_DURATION = 2000;
+
+const typewriterTexts = [
+  "Your personal AI fitness coach",
+  "Reach your goal faster",
+  "Track calories with a photo",
+  "Custom workout plans for you"
+];
+
+const TypewriterText = ({ showEmailForm }: { showEmailForm: boolean }) => {
+  const [textIndex, setTextIndex] = useState(0);
+  const [displayText, setDisplayText] = useState('');
+  const [isDeleting, setIsDeleting] = useState(false);
+
+  useEffect(() => {
+    let timer: NodeJS.Timeout;
+    const currentFullText = typewriterTexts[textIndex];
+
+    if (isDeleting) {
+      timer = setTimeout(() => {
+        setDisplayText(currentFullText.substring(0, displayText.length - 1));
+        if (displayText.length <= 1) {
+          setIsDeleting(false);
+          setTextIndex((prev) => (prev + 1) % typewriterTexts.length);
+        }
+      }, DELETING_SPEED);
+    } else {
+      timer = setTimeout(() => {
+        setDisplayText(currentFullText.substring(0, displayText.length + 1));
+        if (displayText.length === currentFullText.length) {
+          timer = setTimeout(() => setIsDeleting(true), PAUSE_DURATION);
+        }
+      }, TYPING_SPEED);
+    }
+
+    return () => clearTimeout(timer);
+  }, [displayText, isDeleting, textIndex]);
+
+  return (
+    <motion.div
+      initial={{ opacity: 0, y: -8 }}
+      animate={{ opacity: 1, y: showEmailForm ? -14 : -6 }}
+      transition={{ duration: 0.5, ease: [0.22, 1, 0.36, 1] }}
+      className="w-full text-left mt-8 mb-2 h-[88px] sm:h-[100px] flex items-end"
+    >
+      <h1 className="text-[34px] sm:text-[38px] leading-[1.1] font-extrabold text-[#1a365d] tracking-tight font-inter">
+        {displayText}
+        <span className="animate-pulse ml-[2px] border-r-[4px] border-[#1a365d] inline-block align-baseline h-[32px] sm:h-[36px] translate-y-1"></span>
+      </h1>
+    </motion.div>
+  );
+};
 
 export const Auth = () => {
   const navigate = useNavigate();
@@ -433,12 +489,18 @@ export const Auth = () => {
       await handleAuthSuccess({ user: result.user });
     } catch (err: any) {
       console.error('Firebase Google sign-in error:', err);
+      
+      // Ignore errors when user explicitly closes the popup
+      if (err?.code === 'auth/popup-closed-by-user' || err?.code === 'auth/cancelled-popup-request') {
+        return;
+      }
+
       toast({
-        title: t('auth.googleSignInErrorTitle'),
-        description: err?.message || t('auth.signInErrorDescGeneric'),
+        title: t('auth.googleSignInErrorTitle', 'Sign In Error'),
+        description: err?.message || t('auth.signInErrorDescGeneric', 'An unknown error occurred'),
         variant: 'destructive'
       });
-      setAuthError(`${t('auth.signInErrorTitle')}: ${err?.message || 'Unknown error'}`);
+      setAuthError(`${t('auth.signInErrorTitle', 'Sign In Error')}: ${err?.message || 'Unknown error'}`);
     } finally {
       setIsLoading(false);
     }
@@ -521,8 +583,6 @@ export const Auth = () => {
           experienceLevel: userData.experienceLevel || 'BEGINNER',
           onboardingCompleted: userData.onboardingCompleted || false,
           profilePicture: userData.profilePicture || result.user.photoURL || claims.picture || null,
-          isPro: userData.isPro || false,
-          proExpiryDate: userData.proExpiryDate || null,
           isMoodTrackerEnabled: userData.isMoodTrackerEnabled ?? true,
           moodHistory: userData.moodHistory || []
         };
@@ -535,55 +595,20 @@ export const Auth = () => {
           if (!userData.onboardingCompleted) navigate('/welcome', { replace: true });
           else navigate('/home', { replace: true });
         }
-      } else {
-        // Try to migrate from an existing document by email (old UID) if available
-        let migratedData: any | null = null;
-        const emailForLookup = claims.email || result.user.email || null;
-        if (emailForLookup) {
-          try {
-            const usersCol = collection(db, 'users');
-            const q = query(usersCol, where('email', '==', emailForLookup), fblimit(1));
-            const snap = await getDocs(q);
-            if (!snap.empty) {
-              migratedData = snap.docs[0].data();
-              console.log('Found existing user by email, migrating data to new UID:', migratedData);
-            }
-          } catch (e) {
-            console.warn('Email lookup failed, proceeding to create new user:', e);
-          }
-        }
-        // Fallback: try by username (email prefix)
-        if (!migratedData && emailForLookup) {
-          try {
-            const prefix = emailForLookup.split('@')[0];
-            const usersCol = collection(db, 'users');
-            const q2 = query(usersCol, where('username', '==', prefix), fblimit(1));
-            const snap2 = await getDocs(q2);
-            if (!snap2.empty) {
-              migratedData = snap2.docs[0].data();
-              console.log('Found existing user by username, migrating data to new UID:', migratedData);
-            }
-          } catch (e) {
-            console.warn('Username lookup failed:', e);
-          }
-        }
-
         console.log('Creating new user document');
         const newUser = {
-          name: migratedData?.name || result.user.displayName || claims.name || '',
-          username: migratedData?.username || (emailForLookup ? emailForLookup.split('@')[0] : 'user'),
-          email: migratedData?.email || emailForLookup || null,
+          name: result.user.displayName || claims.name || '',
+          username: (emailForLookup ? emailForLookup.split('@')[0] : 'user'),
+          email: emailForLookup || null,
           calorieGoal: 2000,
           proteinGoal: 150,
           carbsGoal: 200,
           fatGoal: 70,
           metabolism: 2200,
           experienceLevel: 'BEGINNER' as const,
-          onboardingCompleted: migratedData?.onboardingCompleted ?? false,
-          profilePicture: migratedData?.profilePicture || result.user.photoURL || claims.picture || null,
-          isPro: migratedData?.isPro ?? false,
-          proExpiryDate: migratedData?.proExpiryDate ?? null,
-          isMoodTrackerEnabled: migratedData?.isMoodTrackerEnabled ?? true,
+          onboardingCompleted: false,
+          profilePicture: result.user.photoURL || claims.picture || null,
+          isMoodTrackerEnabled: true,
           moodHistory: migratedData?.moodHistory || [],
           createdAt: new Date().toISOString(),
           lastUpdated: new Date().toISOString()
@@ -618,8 +643,6 @@ export const Auth = () => {
         experienceLevel: 'BEGINNER' as const,
         onboardingCompleted: false,
         profilePicture: result.user.photoURL || null,
-        isPro: false,
-        proExpiryDate: null,
         isMoodTrackerEnabled: true,
         moodHistory: []
       };
@@ -669,40 +692,53 @@ export const Auth = () => {
         initial={{ y: 12, opacity: 0, scale: 0.98 }}
         animate={{ y: 0, opacity: 1, scale: 1 }}
         transition={{ duration: 0.7, ease: [0.22, 1, 0.36, 1] }}
-        className={`flex-1 flex flex-col items-center ${isIOSStandalone && iosInputFocus ? 'justify-start' : 'justify-center'} relative z-20 content-wrapper`}
+        className={`flex-1 flex flex-col w-full ${isIOSStandalone && iosInputFocus ? 'justify-start' : 'justify-between'} relative z-20 content-wrapper`}
         style={{
           height: '100%',
           minHeight: 'min-content',
-          paddingBottom: '20px',
+          paddingBottom: '32px',
           paddingTop: '20px',
           // Important: avoid transforms while keyboard open on iOS standalone
           transform: isIOSStandalone ? 'none' as any : undefined
         }}
       >
-        <motion.div
-          initial={{ opacity: 0, y: -8 }}
-          animate={{ opacity: 1, y: showEmailForm ? -14 : -6 }}
-          transition={{ duration: 0.5, ease: [0.22, 1, 0.36, 1] }}
-          className="text-center space-y-3 px-6"
-        >
-          <h1 className="text-3xl sm:text-4xl font-extrabold text-black mb-1 font-inter">
-            {t('auth.welcomeHeadline', 'Welcome to Dietin')}
-          </h1>
-          <p className="text-sm sm:text-base text-gray-700 font-inter max-w-xl mx-auto">
-            {t('auth.welcomeSub', 'Log in or create an account to start your journey')}
-          </p>
-          <motion.p
-            initial={{ opacity: 0 }}
-            animate={{ opacity: isVisible ? 1 : 0 }}
-            transition={{ duration: 0.8, ease: [0.22, 1, 0.36, 1] }}
-            className={`text-xs sm:text-sm tracking-wide font-medium font-inter ${color} bg-white/70 px-3 sm:px-4 py-1.5 rounded-full border border-gray-200 inline-block`}
-          >
-            {text}
-          </motion.p>
-        </motion.div>
-        {/* Actions in middle with animated switch */}
-        <div className="w-full mt-2 px-4 sm:px-0">
-          <div className="max-w-[420px] mx-auto">
+        {/* Top Bar */}
+        <div className="w-full flex justify-between items-center px-6 pt-4">
+          <button onClick={() => window.location.reload()} className="p-2.5 rounded-full bg-gray-50/80 backdrop-blur-md hover:bg-gray-100 transition-colors shadow-sm">
+            <RefreshCw className="w-5 h-5 text-gray-700" />
+          </button>
+          <div className="flex items-center justify-center">
+            <img src="/11.png" alt="Dietin Logo" className="h-[48px] w-auto object-contain" />
+          </div>
+          <Sheet>
+            <SheetTrigger asChild>
+              <button className="p-2.5 rounded-full bg-gray-50/80 backdrop-blur-md hover:bg-gray-100 transition-colors shadow-sm">
+                <MoreHorizontal className="w-5 h-5 text-gray-700" />
+              </button>
+            </SheetTrigger>
+            <SheetContent side="bottom" className="rounded-t-[32px] pb-12 pt-8 px-6">
+              <SheetHeader>
+                <SheetTitle className="text-left font-inter mb-4 text-2xl font-bold">Support</SheetTitle>
+              </SheetHeader>
+              <div className="flex flex-col gap-3 mt-2">
+                <a 
+                  href="mailto:support@dietin.pro"
+                  className="w-full py-4 px-5 bg-gray-100 hover:bg-gray-200 rounded-2xl text-left font-semibold text-gray-900 transition-colors flex items-center gap-3"
+                >
+                  <FaEnvelope className="w-5 h-5 text-gray-600" />
+                  Contact Support
+                </a>
+              </div>
+            </SheetContent>
+          </Sheet>
+        </div>
+
+        {/* Bottom Content Wrapper */}
+        <div className="w-full flex flex-col items-center">
+        <div className="w-full max-w-[420px] mx-auto px-6">
+          <TypewriterText showEmailForm={showEmailForm} />
+          {/* Actions in middle with animated switch */}
+          <div className="w-full">
             {/* Smooth height-resizing wrapper focusing only on size, with cross-fade children */}
             <motion.div layout="size" initial={false} animate={{}} transition={{ duration: 0.45, ease: [0.22, 1, 0.36, 1] }} style={{ overflow: 'visible' }}>
               <AnimatePresence mode="wait" initial={false}>
@@ -713,52 +749,48 @@ export const Auth = () => {
                     animate={{ opacity: 1 }}
                     exit={{ opacity: 0 }}
                     transition={{ duration: 0.35, ease: [0.22, 1, 0.36, 1] }}
-                    className="bg-white/90 backdrop-blur rounded-[32px] border border-gray-100 shadow-lg p-4 space-y-3 will-change-opacity"
+                    className="w-full space-y-4 will-change-opacity"
                   >
-                    <button
-                      onClick={handleGoogleSignIn}
-                      disabled={isLoading}
-                      className="w-full bg-black text-white rounded-full py-3 px-5 flex items-center justify-center gap-2 transition-all duration-200 hover:opacity-90 shadow-md hover:shadow-lg"
-                    >
-                      {isLoading ? (
-                        <Loader2 className="w-5 h-5 animate-spin" />
-                      ) : (
-                        <>
-                          <FcGoogle className="w-5 h-5 bg-white rounded-full" />
-                          <span className="font-semibold font-inter">{t('auth.continueWithGoogle', 'Continue with Google')}</span>
-                        </>
-                      )}
-                    </button>
-                    <button
-                      onClick={() => setShowEmailForm(true)}
-                      disabled={isLoading}
-                      className="w-full bg-white text-black rounded-full py-3 px-5 flex items-center justify-center gap-2 transition-all duration-200 hover:bg-white/90 border border-gray-200 shadow-sm"
-                    >
-                      <FaEnvelope className="w-4 h-4" />
-                      <span className="font-semibold font-inter">{t('auth.continueWithEmail', 'Continue with Email')}</span>
-                    </button>
+                    <h2 className="text-[22px] font-bold text-gray-900 mb-3 font-inter text-left">Sign in</h2>
+                    <div className="space-y-3.5">
+                      <button
+                        onClick={handleGoogleSignIn}
+                        disabled={isLoading}
+                        className="w-full bg-[#1c1c1e] text-white rounded-full py-4 px-5 flex items-center justify-center gap-3 transition-all duration-200 hover:opacity-90 shadow-md"
+                      >
+                        {isLoading ? (
+                          <Loader2 className="w-5 h-5 animate-spin" />
+                        ) : (
+                          <>
+                            <FcGoogle className="w-5 h-5 bg-white rounded-full" />
+                            <span className="font-semibold font-inter text-[16px]">{t('auth.continueWithGoogle', 'Continue with Google')}</span>
+                          </>
+                        )}
+                      </button>
+                      <button
+                        onClick={() => setShowEmailForm(true)}
+                        disabled={isLoading}
+                        className="w-full bg-[#1c1c1e] text-white rounded-full py-4 px-5 flex items-center justify-center gap-3 transition-all duration-200 hover:opacity-90 shadow-md"
+                      >
+                        <FaEnvelope className="w-5 h-5" />
+                        <span className="font-semibold font-inter text-[16px]">{t('auth.continueWithEmail', 'Continue with Email')}</span>
+                      </button>
 
-                    {/* Hardcoded Test Account Button */}
-                    <button
-                      onClick={() => handleEmailLogin('abderuhamanelfekky@gmail.com', 'abdo12345')}
-                      disabled={isLoading}
-                      className="w-full bg-gray-100 text-gray-800 rounded-full py-2 px-5 flex items-center justify-center gap-2 transition-all duration-200 hover:bg-gray-200 border border-gray-300 shadow-sm text-sm"
-                    >
-                      <span className="font-medium font-inter">Login with Test Account</span>
-                    </button>
+                      {/* Hardcoded Test Account Button */}
+                      <button
+                        onClick={() => handleEmailLogin('abderuhamanelfekky@gmail.com', 'abdo12345')}
+                        disabled={isLoading}
+                        className="w-full bg-gray-100 text-gray-800 rounded-full py-3.5 px-5 flex items-center justify-center gap-3 transition-all duration-200 hover:bg-gray-200 shadow-sm mt-5"
+                      >
+                        <span className="font-medium font-inter text-[16px]">Login with Test Account</span>
+                      </button>
+                    </div>
 
                     {authError && (
-                      <p className="text-xs text-red-500 text-center mt-1">{authError}</p>
+                      <p className="text-xs text-red-500 text-center mt-2">{authError}</p>
                     )}
-                    <p className="text-center text-gray-600 text-xs mt-1 font-inter">
-                      {t('auth.agreePrefix', 'By continuing, you agree to our')}{' '}
-                      <a href="https://dietin.fit/privacy-policy" target="_blank" rel="noopener noreferrer" className="text-black underline underline-offset-2">
-                        {t('auth.privacyPolicy', 'Privacy Policy')}
-                      </a>
-                      {' '}{t('auth.and', 'and')}{' '}
-                      <a href="https://dietin.fit/terms-of-service" target="_blank" rel="noopener noreferrer" className="text-black underline underline-offset-2">
-                        {t('auth.termsOfService', 'Terms of Service')}
-                      </a>
+                    <p className="text-center text-gray-500 text-xs mt-6 font-inter pt-4">
+                      Terms of Use (EULA) & Privacy Policy
                     </p>
                   </motion.div>
                 ) : (
@@ -913,6 +945,7 @@ export const Auth = () => {
               </AnimatePresence>
             </motion.div>
           </div>
+        </div>
         </div>
       </motion.div>
       {/* Email verification modal */}

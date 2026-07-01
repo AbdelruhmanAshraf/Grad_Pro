@@ -1,6 +1,6 @@
 import { cn } from "@/lib/utils";
 import { Link, useLocation, useNavigate } from "react-router-dom";
-import { Home, ClipboardList, LineChart, Dumbbell, User, Plus, Utensils, LucideIcon } from 'lucide-react';
+import { Home, ClipboardList, LineChart, Dumbbell, User, Plus, Utensils, LucideIcon, Apple } from 'lucide-react';
 import { useUserStore } from "@/stores/userStore";
 import { routes } from "@/lib/routes";
 import { useState, useEffect, useRef } from "react";
@@ -23,14 +23,14 @@ interface NavItemType {
 export function BottomNav({ className, activePath, ...props }: BottomNavProps) {
   const { t } = useTranslation();
   const location = useLocation();
-  const [lastTrackerPath, setLastTrackerPath] = useState("/diet");
+  const [lastTrackerPath, setLastTrackerPath] = useState("/progress");
   const navigate = useNavigate();
   const { user } = useUserStore();
   const [isMealAnalysisOpen, setIsMealAnalysisOpen] = useState(false);
   const navRef = useRef<HTMLDivElement | null>(null);
 
   useEffect(() => {
-    if (["/diet", "/burn", "/hydration"].includes(location.pathname)) {
+    if (["/progress", "/burn", "/hydration"].includes(location.pathname)) {
       setLastTrackerPath(location.pathname);
       localStorage.setItem("lastTrackerPath", location.pathname);
     }
@@ -82,10 +82,9 @@ export function BottomNav({ className, activePath, ...props }: BottomNavProps) {
     { name: "home", icon: Home, path: "/home" },
     { name: "workouts", icon: Dumbbell, path: "/plan" },
     { 
-      name: "add", 
-      icon: Utensils, 
-      path: "#", 
-      onClick: () => setIsMealAnalysisOpen(true)
+      name: "diet", 
+      icon: Apple, 
+      path: "/diet"
     },
     { name: "tracker", icon: LineChart, path: lastTrackerPath },
     { 
@@ -174,14 +173,14 @@ const NavItem = ({
   const navigate = useNavigate();
 
   const isActive = name === "tracker" 
-    ? ["/diet", "/burn", "/hydration"].includes(currentPath)
+    ? ["/progress", "/burn", "/hydration"].includes(currentPath)
     : name === "workouts"
-      ? ["/plan", "/workouts", "/progress"].includes(currentPath)
+      ? ["/plan", "/workouts"].includes(currentPath)
       : name === "home"
         ? (currentPath === "/" || currentPath === "/home")
         : currentPath === path;
 
-  const isAddButton = name === "add";
+  const isAddButton = false; // Add button styling removed
 
   if (onClick) {
     return (

@@ -70,7 +70,7 @@ export const CameraView = forwardRef<HTMLVideoElement, CameraViewProps>(function
   }, [active, facingMode, ref, onReady, onPermissionDenied]);
 
   return (
-    <div className={cn("relative aspect-video rounded-2xl overflow-hidden bg-black", className)}>
+    <div className={cn("relative aspect-[3/4] max-h-[65vh] rounded-2xl overflow-hidden bg-black mx-auto w-full", className)}>
       <video
         ref={ref}
         autoPlay
