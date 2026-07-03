@@ -821,7 +821,12 @@ Return EXACTLY 3 items in this JSON format (no extra text):
       }
     } catch (error) {
       setHasError(true);
-      setSuggestions([]); // Clear suggestions on error
+      // Always fall back to example meals so the UI never appears empty,
+      // matching the behaviour in Burn.tsx.
+      const fallbackMealType = getMealType(new Date().getHours());
+      const fallbackMeals = getExampleMeals(t, fallbackMealType);
+      setLastMealType(fallbackMealType);
+      setSuggestions(fallbackMeals);
 
       // Handle rate limit error or generic failures - don't retry automatically to avoid flooding
       if (error.toString().includes('429') || error.toString().includes('Too Many Requests')) {
@@ -1303,21 +1308,7 @@ Return EXACTLY 3 items in this JSON format (no extra text):
                             <div className="absolute -inset-8 bg-gradient-to-tr from-blue-500/10 to-purple-500/10 rounded-full blur-2xl animate-pulse" />
                             <div className="relative w-32 h-32">
                               <div className="absolute inset-0 flex items-center justify-center">
-                                <motion.div
-                                  animate={{
-                                    scale: [1, 1.2, 1],
-                                    rotate: [0, 180, 360]
-                                  }}
-                                  transition={{
-                                    duration: 2,
-                                    repeat: Infinity,
-                                    ease: "linear"
-                                  }}
-                                  className="relative"
-                                >
-                                  <div className="absolute -inset-4 bg-blue-500/20 rounded-full blur-lg animate-pulse" />
-                                  <Sparkles className="h-10 w-10 text-blue-400" />
-                                </motion.div>
+                                <Loader size={40} className="text-blue-400" />
                               </div>
                               <svg className="w-full h-full -rotate-90">
                                 <circle

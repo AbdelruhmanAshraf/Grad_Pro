@@ -6,6 +6,8 @@ import { Camera, Pencil, Search, Sparkles, X, Plus, Tag, ChevronLeft, BarChart3,
 import Loader from "./Loader";
 import { useUserStore } from "@/stores/userStore";
 import { genAI, analyzeNutrition } from "@/lib/gemini";
+import { AIAgentCore } from "@/lib/ai/agent/core";
+import { buildMealAnalysisRequest } from "@/lib/ai/agent/branches/mealAnalysis";
 import { addMealSchema } from "@/lib/validation/schemas";
 import { db } from "@/lib/firebase";
 import { doc, getDoc, increment } from "firebase/firestore";
@@ -894,67 +896,43 @@ const MealAnalysis = ({ isOpen, onClose, setIsSearchOpen, editEntry }: MealAnaly
         incrementMealAnalysis();
       }
 
-      const modelName = import.meta.env.VITE_GEMINI_MODEL_FOOD || "gemini-2.5-pro";
-      const model = genAI.getGenerativeModel({ model: modelName });
-      const promptLanguage = i18n.language?.startsWith('ar') ? 'Arabic' : 'English';
+      // Route through AIAgentCore
+      const agent = new AIAgentCore();
+      const result = await agent.process(
+        buildMealAnalysisRequest(description, undefined)
+      );
 
-      const prompt = `Analyze this meal description and provide detailed nutritional information.
-      If this is not a food, meal, or drink, respond with { "isFood": false, "error": "reason" }.
+      console.log('AIAgentCore result:', result);
 
-      Description: "${description}"
-      This informations will help you generating nice and suitable suggestions:
-      User Profile:
-      Age: ${user?.age || "N/A"}
-      Gender: ${user?.gender || "N/A"}
-      Weight: ${user?.weight || "N/A"}kg/lbs
-      Height: ${user?.height || "N/A"}cm/ft
-      Daily Calorie Goal: ${user?.calorieGoal || "N/A"}
-      Protein Goal: ${user?.proteinGoal || "N/A"}g
-      Carbs Goal: ${user?.carbsGoal || "N/A"}g
-      Fat Goal: ${user?.fatGoal || "N/A"}g
-      Allergies: ${user?.allergies?.join(", ") || "None"}
-      Diet Preferences: ${user?.dietaryPreferences?.join(", ") || "None"}
-      Cuisine Preferences: ${user?.cuisinePreferences?.join(", ") || "None"}
-
-      IMPORTANT: Return ONLY the raw JSON object with no markdown formatting, code blocks, or additional text.
-      
-      If this is food/drink, respond with a JSON object:
-      {
-        "isFood": true,
-        "title": "Brief very short title",
-        "calories": exact_number,
-        "protein": nearest_gram,
-        "carbs": nearest_gram,
-        "fat": nearest_gram,
-        "cholesterol": mg,
-        "magnesium": mg,
-        "sugar": grams,
-        "fiber": grams,
-        "sodium": mg,
-        "potassium": mg,
-        "vitaminA": percentage_of_daily_value,
-        "vitaminC": percentage_of_daily_value,
-        "calcium": percentage_of_daily_value,
-        "iron": percentage_of_daily_value,
-        "score": 0-100_based_on_health_and_goals,
-        "suggestions": ["improvement suggestions"],
-        "ingredients": ["detected ingredients"]
+      // Handle blocked result
+      if (result.blocked) {
+        setAnalysisResult({
+          isFood: false,
+          error: result.blockReason || 'Request was blocked'
+        } as AnalysisResult);
+        setIsAnalyzing(false);
+        return;
       }
-      IMPORTANT: Use ${promptLanguage} for all string fields (like title, suggestions, and ingredients). Numbers stay as numbers. Return ONLY raw JSON.`;
 
-      const result = await model.generateContent(prompt);
-      const response = await result.response;
-      const text = response.text();
+      // Handle non-ok result
+      if (!result.ok) {
+        setAnalysisResult({
+          isFood: false,
+          error: result.error || 'Analysis failed'
+        } as AnalysisResult);
+        setIsAnalyzing(false);
+        return;
+      }
 
-      console.log('Raw AI response:', text);
-
+      // Handle successful result - parse JSON response
+      const responseText = result.response || '';
       try {
         // Clean the response text to handle markdown code blocks
-        let cleanedText = text;
+        let cleanedText = responseText;
 
         // Remove markdown code blocks if present
-        if (text.includes("```")) {
-          cleanedText = text.replace(/```(?:json)?\n([\s\S]*?)```/g, "$1").trim();
+        if (responseText.includes("```")) {
+          cleanedText = responseText.replace(/```(?:json)?\n([\s\S]*?)```/g, "$1").trim();
         }
 
         console.log('Cleaned response text:', cleanedText);
@@ -998,7 +976,7 @@ const MealAnalysis = ({ isOpen, onClose, setIsSearchOpen, editEntry }: MealAnaly
         setAnalysisResult(analysisData);
       } catch (parseError) {
         console.error("Failed to parse AI response:", parseError);
-        console.log("Raw response:", text);
+        console.log("Raw response:", responseText);
         setAnalysisResult({
           isFood: false,
           error: "Failed to analyze the meal. The AI response was not in the expected format."

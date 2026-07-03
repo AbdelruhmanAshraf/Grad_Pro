@@ -1,6 +1,7 @@
 import { motion, AnimatePresence, PanInfo, useMotionValue, useTransform } from "framer-motion";
 import { Sparkles, X, ChevronLeft } from "lucide-react";
 import { cn } from "@/lib/utils";
+import Loader from "./Loader";
 import { useState } from "react";
 import { useTranslation } from "react-i18next";
 
@@ -154,7 +155,7 @@ const ImproveAI = ({ onClick, className, analysisResult, onImprove }: ImproveAIP
                   >
                     {isLoading ? (
                       <>
-                        <Sparkles className="w-4 h-4 animate-pulse" />
+                        <Loader size={16} className="text-white" />
                         {t('improveAI.improving')}
                       </>
                     ) : (

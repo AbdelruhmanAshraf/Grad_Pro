@@ -2,8 +2,11 @@ import { motion, AnimatePresence } from "framer-motion";
 import { useState, useEffect, useRef } from "react";
 import NavHide from "../components/NavHide";
 import { cn } from "@/lib/utils";
-import { Camera, Pencil, Search, Sparkles, X, Plus, Tag, ChevronLeft, Loader2, BarChart3, Utensils, Flame, Lock } from "lucide-react";
+import { Camera, Pencil, Search, Sparkles, X, Plus, Tag, ChevronLeft, BarChart3, Utensils, Flame, Lock } from "lucide-react";
+import Loader from "../components/Loader";
 import { useUserStore } from "@/stores/userStore";
+import { AIAgentCore } from "@/lib/ai/agent/core";
+import { buildMealAnalysisRequest } from "@/lib/ai/agent/branches/mealAnalysis";
 import { analyzeNutrition, generateJSON, generateText } from "@/lib/gemini";
 import { addMealSchema } from "@/lib/validation/schemas";
 import { db } from "@/lib/firebase";
@@ -894,57 +897,73 @@ const AddMeal = () => {
       }
 
       try {
-        console.log('Parsed analysis data:', analysisData);
-
-        // Validate the analysis data structure
-        if (!analysisData.isFood) {
-          if (!analysisData.error) {
-            throw new Error('Invalid response: missing error message for non-food item');
-          }
-        } else {
-          // Validate required fields for food items
-          const requiredFields = ['title', 'calories', 'protein', 'carbs', 'fat', 'score', 'suggestions', 'ingredients'];
-          const missingFields = requiredFields.filter(field => {
-            const value = analysisData[field];
-            return value === undefined || value === null ||
-              (typeof value === 'string' && !value.trim()) ||
-              (Array.isArray(value) && value.length === 0);
-          });
-
-          if (missingFields.length > 0) {
-            throw new Error(`Invalid response: missing required fields: ${missingFields.join(', ')}`);
-          }
-
-          // Ensure numeric fields are valid numbers
-          ['calories', 'protein', 'carbs', 'fat', 'score'].forEach(field => {
-            const value = analysisData[field];
-            if (typeof value !== 'number' || isNaN(value)) {
-              throw new Error(`Invalid response: ${field} must be a valid number`);
-            }
-          });
-
-          // Ensure arrays are valid
-          if (!Array.isArray(analysisData.suggestions) || !Array.isArray(analysisData.ingredients)) {
-            throw new Error('Invalid response: suggestions and ingredients must be arrays');
-          }
-        }
-
-        setAnalysisResult(analysisData);
-      } catch (parseError) {
-        console.error("Failed to parse AI response:", parseError);
+        // Route through AIAgentCore
+      const agent = new AIAgentCore();
+      const result = await agent.process(buildMealAnalysisRequest(description, undefined));
+      
+      if (result.blocked) {
         setAnalysisResult({
           isFood: false,
-          error: parseError instanceof Error ? parseError.message : "Failed to analyze the meal. The AI response was not in the expected format."
+          error: result.blockReason
         } as AnalysisResult);
+        return;
       }
-    } catch (error: any) {
-      console.error("AI analysis error:", error);
+
+      if (!result.ok) {
+        setAnalysisResult({
+          isFood: false,
+          error: result.error
+        } as AnalysisResult);
+        return;
+      }
+
+      console.log('AIAgentCore result:', result);
+      const analysisData = result.response ? JSON.parse(result.response) : null;
+
+      // Validate the analysis data structure
+      if (!analysisData) {
+        throw new Error('Failed to parse AI response');
+      }
+
+      if (!analysisData.isFood) {
+        if (!analysisData.error) {
+          throw new Error('Invalid response: missing error message for non-food item');
+        }
+      } else {
+        // Validate required fields for food items
+        const requiredFields = ['title', 'calories', 'protein', 'carbs', 'fat', 'score', 'suggestions', 'ingredients'];
+        const missingFields = requiredFields.filter(field => {
+          const value = analysisData[field];
+          return value === undefined || value === null ||
+            (typeof value === 'string' && !value.trim()) ||
+            (Array.isArray(value) && value.length === 0);
+        });
+
+        if (missingFields.length > 0) {
+          throw new Error(`Invalid response: missing required fields: ${missingFields.join(', ')}`);
+        }
+
+        // Ensure numeric fields are valid numbers
+        ['calories', 'protein', 'carbs', 'fat', 'score'].forEach(field => {
+          const value = analysisData[field];
+          if (typeof value !== 'number' || isNaN(value)) {
+            throw new Error(`Invalid response: ${field} must be a valid number`);
+          }
+        });
+
+        // Ensure arrays are valid
+        if (!Array.isArray(analysisData.suggestions) || !Array.isArray(analysisData.ingredients)) {
+          throw new Error('Invalid response: suggestions and ingredients must be arrays');
+        }
+      }
+
+      setAnalysisResult(analysisData);
+    } catch (parseError) {
+      console.error("Failed to parse AI response:", parseError);
       setAnalysisResult({
         isFood: false,
-        error: "Failed to analyze the meal: " + (error?.message || error?.toString() || "Please try again.")
+        error: parseError instanceof Error ? parseError.message : "Failed to analyze the meal. The AI response was not in the expected format."
       } as AnalysisResult);
-    } finally {
-      setIsAnalyzing(false);
     }
   };
 
@@ -1349,13 +1368,7 @@ const AddMeal = () => {
                     <motion.div
                       className="flex flex-col items-center justify-center h-[78vh] -mt-20 space-y-6"
                     >
-                      <div className="relative w-20 h-20 animate-pulse">
-                        <div className="absolute inset-0 rounded-full bg-gradient-to-br from-[#007AFF]/20 to-[#0055FF]/10"></div>
-                        <div className="absolute inset-0 rounded-full border-4 border-[#007AFF]/30"></div>
-                        <div className="absolute inset-0 flex items-center justify-center">
-                          <Sparkles className="w-8 h-8 text-[#007AFF]" />
-                        </div>
-                      </div>
+                      <Loader size={80} />
                       <div className="space-y-2 text-center">
                         <p className={`text-base ${fontStyles.subheading} text-[#1d1d1f] dark:text-white`}>
                           {t('mealAnalysis.ai.analyzing')}
@@ -1703,13 +1716,7 @@ const AddMeal = () => {
                       transition={{ duration: 0.4 }}
                       className="flex flex-col items-center justify-center h-[78vh] -mt-20 space-y-6"
                     >
-                      <div className="relative w-20 h-20 animate-pulse">
-                        <div className="absolute inset-0 rounded-full bg-gradient-to-br from-[#007AFF]/20 to-[#0055FF]/10"></div>
-                        <div className="absolute inset-0 rounded-full border-4 border-[#007AFF]/30"></div>
-                        <div className="absolute inset-0 flex items-center justify-center">
-                          <Sparkles className="w-8 h-8 text-[#007AFF]" />
-                        </div>
-                      </div>
+                      <Loader size={80} />
                       <div className="space-y-2 text-center">
                         <p className={`text-base ${fontStyles.subheading} text-[#1d1d1f] dark:text-white`}>
                           {t('mealAnalysis.photo.analyzing')}

@@ -2,6 +2,7 @@ import { useState, useEffect, useMemo, useRef, memo } from 'react';
 import { Line } from 'react-chartjs-2';
 import { format } from 'date-fns';
 import { Plus } from 'lucide-react';
+import Loader from './Loader';
 import { doc, updateDoc, getDoc, onSnapshot } from 'firebase/firestore';
 import { db, auth } from '@/lib/firebase';
 import { useUserStore } from '@/stores/userStore';
@@ -468,9 +469,7 @@ const ProgressChart = () => {
 
           {isLoading && !everLoaded && (
             <div className="absolute inset-0 flex flex-col items-center justify-center bg-white/60 backdrop-blur-[1px] pointer-events-none">
-              <div className="w-16 h-16 rounded-full bg-gray-100 flex items-center justify-center mx-auto mb-4 animate-pulse">
-                <div className="w-8 h-8 rounded-full bg-gray-200"></div>
-              </div>
+              <Loader size={64} className="mx-auto mb-4 text-gray-700" />
               <h4 className="text-lg font-semibold text-gray-900 mb-2">{t('profile.progress.loadingTitle')}</h4>
             </div>
           )}

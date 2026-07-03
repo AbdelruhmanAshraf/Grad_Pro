@@ -1245,13 +1245,9 @@ export function Welcome() {
       description: "",
       fields: (
         <div className="flex flex-col items-center justify-center py-20 text-center">
-          <motion.div
-            animate={{ rotate: 360 }}
-            transition={{ repeat: Infinity, duration: 2, ease: "linear" }}
-            className="mb-8"
-          >
-            <Bot size={64} className="text-[#1c2333]" />
-          </motion.div>
+          <div className="mb-8">
+            <Loader size={64} className="text-[#1c2333]" />
+          </div>
           <motion.p
             key={currentAiText}
             initial={{ opacity: 0, y: 10 }}

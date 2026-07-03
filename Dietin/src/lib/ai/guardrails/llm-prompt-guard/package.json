@@ -1,0 +1,79 @@
+{
+  "name": "llm-prompt-guard",
+  "version": "2.0.2",
+  "description": "Regex-based prompt injection firewall for TypeScript. Zero dependencies, sub-millisecond, with neutralization mode.",
+  "main": "dist/index.js",
+  "module": "dist/index.mjs",
+  "types": "dist/index.d.ts",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "import": "./dist/index.mjs",
+      "require": "./dist/index.js"
+    },
+    "./patterns/multilingual": {
+      "types": "./dist/patterns/multilingual.d.ts",
+      "import": "./dist/patterns/multilingual.mjs",
+      "require": "./dist/patterns/multilingual.js"
+    }
+  },
+  "files": [
+    "dist",
+    "LICENSE",
+    "README.md",
+    "MIGRATION.md"
+  ],
+  "scripts": {
+    "build": "tsup",
+    "test": "jest",
+    "test:coverage": "jest --coverage",
+    "lint": "eslint src/ --ext .ts",
+    "typecheck": "tsc --noEmit",
+    "bench": "ts-node benchmarks/run.ts",
+    "prepare": "tsup",
+    "prepublishOnly": "npm run build"
+  },
+  "keywords": [
+    "llm",
+    "prompt-injection",
+    "security",
+    "sanitizer",
+    "ai",
+    "openai",
+    "claude",
+    "gemini",
+    "owasp",
+    "prompt-guard",
+    "firewall",
+    "input-validation",
+    "spotlighting",
+    "datamarking",
+    "defense-in-depth",
+    "exfiltration-detection",
+    "unicode-tag",
+    "quarantine",
+    "canary",
+    "output-validation"
+  ],
+  "author": "Shane Hamilton",
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/shanemhamilton/llm-prompt-guard.git"
+  },
+  "bugs": {
+    "url": "https://github.com/shanemhamilton/llm-prompt-guard/issues"
+  },
+  "homepage": "https://github.com/shanemhamilton/llm-prompt-guard#readme",
+  "engines": {
+    "node": ">=20.0.0"
+  },
+  "devDependencies": {
+    "@types/jest": "^29.5.14",
+    "jest": "^29.7.0",
+    "ts-jest": "^29.2.5",
+    "ts-node": "^10.9.0",
+    "tsup": "^8.3.6",
+    "typescript": "^5.7.3"
+  }
+}
