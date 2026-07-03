@@ -33,7 +33,6 @@ export const CameraView = forwardRef<HTMLVideoElement, CameraViewProps>(function
             facingMode,
             width: { ideal: 640 },
             height: { ideal: 480 },
-            frameRate: { ideal: 15, max: 20 },
           },
           audio: false,
         });

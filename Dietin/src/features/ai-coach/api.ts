@@ -1,5 +1,6 @@
 // Typed wrappers around the AI Coach REST endpoints.
 import { aiFetch } from "@/lib/aiCoachApi";
+import { workoutStartSchema } from "@/lib/validation/schemas";
 import type {
   Exercise,
   FrameResponse,
@@ -19,9 +20,20 @@ export function listExercises(signal?: AbortSignal): Promise<Exercise[]> {
 }
 
 export function startSession(payload: SessionStartRequest): Promise<SessionStartResponse> {
+  // Bound-check the payload against the shared schema before the wire so we
+  // never send anything the FastAPI Pydantic model will 422 on.
+  const parsed = workoutStartSchema.safeParse({
+    exercise: payload.exercise ?? undefined,
+    sets: payload.sets ?? 1,
+    target_reps: payload.target_reps ?? 12,
+    rest_timer: payload.rest_timer ?? 60,
+  });
+  if (!parsed.success) {
+    return Promise.reject(new Error(parsed.error.issues[0]?.message || "Invalid workout params"));
+  }
   return aiFetch<SessionStartResponse>("/api/session/start", {
     method: "POST",
-    body: JSON.stringify(payload),
+    body: JSON.stringify(parsed.data),
   });
 }
 

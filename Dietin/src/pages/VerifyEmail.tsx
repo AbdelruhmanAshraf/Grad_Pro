@@ -2,7 +2,8 @@ import React, { useEffect, useMemo, useState } from 'react';
 import { useLocation } from 'react-router-dom';
 import { auth } from '@/lib/firebase';
 import { applyActionCode, reload, checkActionCode } from 'firebase/auth';
-import { Loader2, CheckCircle2, AlertTriangle } from 'lucide-react';
+import { CheckCircle2, AlertTriangle } from 'lucide-react';
+import Loader from "@/components/Loader";
 import { useTranslation } from 'react-i18next';
 
 function useQuery() {
@@ -71,7 +72,7 @@ export default function VerifyEmail() {
         {status === 'verifying' && (
           <div className="flex flex-col items-center gap-4">
             <div className="relative inline-flex items-center justify-center w-16 h-16 rounded-full bg-indigo-500/10 text-indigo-600 dark:text-indigo-400">
-              <Loader2 className="h-8 w-8 animate-spin" />
+              <Loader size={32} />
             </div>
             <h1 className="text-xl font-semibold">
               {t('verify.title_verifying', 'Verifying your email...')}

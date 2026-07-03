@@ -1,5 +1,6 @@
-import { AlertTriangle, Loader2, RefreshCw, Server } from "lucide-react";
+import { AlertTriangle, RefreshCw, Server } from "lucide-react";
 import { Button } from "@/components/ui/button";
+import Loader from "@/components/Loader";
 import type { HealthStatus } from "../hooks/useAIHealth";
 
 export interface ReadinessBannerProps {
@@ -13,7 +14,7 @@ export function ReadinessBanner({ status, onRetry }: ReadinessBannerProps) {
   if (status.state === "loading") {
     return (
       <div className="flex items-center gap-3 rounded-xl bg-blue-500/5 border border-blue-500/15 text-blue-700 dark:text-blue-300 px-3 py-2 text-sm">
-        <Loader2 className="h-4 w-4 animate-spin" />
+        <Loader size={16} />
         <span>Connecting to the AI Coach…</span>
       </div>
     );

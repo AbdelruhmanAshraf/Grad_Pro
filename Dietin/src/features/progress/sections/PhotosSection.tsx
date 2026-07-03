@@ -34,7 +34,7 @@ function PhotoTile({ photo, view, onClick }: { photo: ProgressPhoto; view: Photo
       onClick={() => onClick?.(photo[view]?.path)}
       className="aspect-[3/4] rounded-2xl overflow-hidden bg-black/5 dark:bg-white/5 group relative w-full"
     >
-      <img src={url} alt={view} className="absolute inset-0 w-full h-full object-cover" />
+      <img src={url} alt={view} className="absolute inset-0 w-full h-full object-cover" loading="lazy" />
     </button>
   );
 }

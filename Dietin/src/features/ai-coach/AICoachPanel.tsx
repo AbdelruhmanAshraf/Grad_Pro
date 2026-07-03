@@ -48,7 +48,7 @@ export function AICoachPanel({ exercise, onRepDetected, compact }: AICoachPanelP
   useFrameLoop({
     videoRef,
     active: loopActive,
-    intervalMs: 200,
+    intervalMs: 100,
     quality: 0.5,
     maxEdge: 480,
     onFrame: async (dataUrl) => {
@@ -168,7 +168,7 @@ export function AICoachPanel({ exercise, onRepDetected, compact }: AICoachPanelP
               </Button>
             ) : (
               <>
-                <Button onClick={handleStop} variant="outline" className="flex-1">
+                <Button onClick={handleStop} variant="destructive" className="flex-1">
                   <Square className="h-4 w-4 mr-1.5" />
                   {t("aiCoach.stop", { defaultValue: "Stop" })}
                 </Button>

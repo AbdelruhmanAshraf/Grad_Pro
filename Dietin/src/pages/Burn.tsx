@@ -4,6 +4,7 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { RefreshCw, Timer, Brain, Dumbbell, ChevronDown, ChevronUp, X, Pause, Play, Activity, Lock, Utensils, Droplet, Flame } from "lucide-react";
 import { cn } from "@/lib/utils";
+import Loader from "@/components/Loader";
 import { useState, useEffect, useRef } from "react";
 import { useTranslation } from 'react-i18next';
 import { generateJSON } from "@/lib/gemini";
@@ -760,7 +761,11 @@ export const Burn = () => {
                   )}
                   disabled={loading}
                 >
-                  <RefreshCw className={cn("h-5 w-5 text-white", loading && "animate-spin")} />
+                  {loading ? (
+                    <Loader size={20} className="h-5 w-5 text-white" />
+                  ) : (
+                    <RefreshCw className="h-5 w-5 text-white" />
+                  )}
                 </button>
               </ProFeatures>
             </div>

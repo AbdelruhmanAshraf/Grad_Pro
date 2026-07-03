@@ -3,6 +3,7 @@ import { generateJSON } from "@/lib/gemini";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
+import Loader from "./Loader";
 import { 
   AlertTriangle,
   Apple,
@@ -475,6 +476,7 @@ const HydrationAI: React.FC<HydrationAIProps> = ({
   const { t, i18n } = useTranslation();
   const responseLanguage = i18n.language && i18n.language.startsWith('ar') ? 'Arabic' : 'English';
   const [loading, setLoading] = useState(false);
+  const [hasError, setHasError] = useState(false);
   const [isBlurred, setIsBlurred] = useState(false);
   const [isExpanded, setIsExpanded] = useState(false);
   const [selectedDrink, setSelectedDrink] = useState<DrinkSuggestion | null>(null);
@@ -567,6 +569,7 @@ const HydrationAI: React.FC<HydrationAIProps> = ({
   }, []);
 
   const shouldRefreshDrinks = useCallback(() => {
+    if (suggestions.length === 0) return true;
     if (!lastUpdated) return true;
 
     const now = new Date();
@@ -582,13 +585,17 @@ const HydrationAI: React.FC<HydrationAIProps> = ({
     if (currentDrinkType !== lastDrinkType) return true;
     
     return false;
-  }, [lastUpdated, lastDrinkType, getDrinkType]);
+  }, [suggestions.length, lastUpdated, lastDrinkType, getDrinkType]);
 
   const generateDrinkSuggestions = async (retryCount = 0) => {
     setLoading(true);
     try {
-      // For non-pro users, don't generate AI suggestions - they'll see static examples via ProFeatures component
+      // For non-pro users, show hardcoded example drinks instead of calling the AI
       if (!user?.isPro) {
+        const currentDrinkType = getDrinkType(new Date().getHours());
+        setLastDrinkType(currentDrinkType);
+        setSuggestions(EXAMPLE_DRINKS);
+        setHasError(false);
         setLoading(false);
         return;
       }
@@ -627,50 +634,40 @@ const HydrationAI: React.FC<HydrationAIProps> = ({
 
       const newSuggestions = await generateJSON<DrinkSuggestion[]>({ prompt });
 
-      // Validate the response structure
-      if (!Array.isArray(newSuggestions) || newSuggestions.length !== 3) {
+      // Validate and sanitize the response structure
+      if (!Array.isArray(newSuggestions)) {
         throw new Error('Invalid response format');
       }
 
-      // Validate that suggestions are actually drinks - include Arabic when needed
-      const drinkKeywordsEn = [
-        'drink', 'juice', 'smoothie', 'tea', 'water', 'shake', 'coffee',
-        'latte', 'beverage', 'lemonade', 'punch', 'milk', 'soda', 'chai',
-        'espresso', 'frappe', 'mocha', 'brew', 'tonic', 'cider'
-      ];
-      const drinkKeywordsAr = [
-        'مشروب', 'عصير', 'سموذي', 'شاي', 'ماء', 'مياه', 'شيك', 'قهوة',
-        'لاتيه', 'مشروب غازي', 'ليمونادة', 'بانش', 'حليب', 'صودا', 'شراب'
-      ];
+      const validatedSuggestions: DrinkSuggestion[] = newSuggestions.map(drink => {
+        return {
+          name: drink.name || 'Refreshing Drink',
+          type: drink.type || `${currentDrinkType} Hydration`,
+          calories: Math.max(0, Number(drink.calories) || 50),
+          protein: Math.max(0, Number(drink.protein) || 0),
+          carbs: Math.max(0, Number(drink.carbs) || 10),
+          fat: Math.max(0, Number(drink.fat) || 0),
+          difficulty: drink.difficulty || 'Easy',
+          timeToMake: drink.timeToMake || '5 minutes',
+          budget: drink.budget || '€',
+          quickRecipe: drink.quickRecipe || 'Mix and serve.'
+        };
+      }).slice(0, 3);
 
-      const hasDrinkKeyword = (text: string) => {
-        const lower = (text || '').toLowerCase();
-        const ar = responseLanguage === 'Arabic';
-        const matchEn = drinkKeywordsEn.some(k => lower.includes(k));
-        const matchAr = drinkKeywordsAr.some(k => text.includes(k));
-        return ar ? (matchAr || matchEn) : matchEn;
-      };
-
-      if (newSuggestions.some(s => !hasDrinkKeyword(s.name) && !hasDrinkKeyword(s.quickRecipe))) {
-        console.warn('Retrying due to non-drink suggestions:', newSuggestions);
-        throw new Error('Non-drink suggestions detected');
-      }
-      
+      setHasError(false);
       setLastDrinkType(currentDrinkType);
-      setSuggestions(newSuggestions);
+      setSuggestions(validatedSuggestions);
     } catch (error) {
-      console.error('Error generating drink suggestions:', error);
+      setHasError(true);
       setSuggestions([]); // Clear suggestions on error
       
-      // Handle rate limit error
+      // Handle rate limit error or generic failures - don't retry automatically to avoid flooding
       if (error.toString().includes('429') || error.toString().includes('Too Many Requests')) {
-        const delay = Math.min(1000 * Math.pow(2, retryCount), 10000); // Exponential backoff up to 10 seconds
+        const delay = Math.min(2000 * Math.pow(2, retryCount), 10000);
         await new Promise(resolve => setTimeout(resolve, delay));
-        generateDrinkSuggestions(retryCount + 1);
-      } else if (retryCount < 3) {
-        // For other errors, retry with a delay
-        await new Promise(resolve => setTimeout(resolve, 1000));
-        generateDrinkSuggestions(retryCount + 1);
+        if (retryCount < 1) {
+          generateDrinkSuggestions(retryCount + 1);
+        }
       }
     } finally {
       setLoading(false);
@@ -739,7 +736,6 @@ const HydrationAI: React.FC<HydrationAIProps> = ({
         updateLoadingStep('tutorial', 2, 'complete');
         recipeData.youtubeLink = youtubeSearchUrl;
       } catch (error) {
-        console.error('Error finding YouTube tutorial:', error);
         updateLoadingStep('tutorial', 0, 'error');
         updateLoadingStep('tutorial', 1, 'error');
         updateLoadingStep('tutorial', 2, 'error');
@@ -761,7 +757,6 @@ const HydrationAI: React.FC<HydrationAIProps> = ({
       setDetailedRecipe(finalRecipeData);
       
     } catch (error) {
-      console.error('Error generating recipe details:', error);
       setDetailedRecipe(null);
       // Mark all remaining steps as error
       loadingSteps.forEach(step => {
@@ -787,7 +782,7 @@ const HydrationAI: React.FC<HydrationAIProps> = ({
   // Check for updates every minute
   useEffect(() => {
     const checkForUpdates = () => {
-      if (shouldRefreshDrinks() && !loading) {
+      if (shouldRefreshDrinks() && !loading && !hasError) {
         generateDrinkSuggestions();
       }
     };
@@ -799,7 +794,7 @@ const HydrationAI: React.FC<HydrationAIProps> = ({
     const interval = setInterval(checkForUpdates, 60000); // Check every minute
     
     return () => clearInterval(interval);
-  }, [shouldRefreshDrinks, loading]);
+  }, [shouldRefreshDrinks, loading, user, user?.isPro, hasError]);
 
   useEffect(() => {
     if (loading) {
@@ -954,7 +949,11 @@ const HydrationAI: React.FC<HydrationAIProps> = ({
             )}
             disabled={loading}
           >
-            <RefreshCw className={cn("h-5 w-5 text-white", loading && "animate-spin")} />
+            {loading ? (
+              <Loader size={20} className="h-5 w-5 text-white" />
+            ) : (
+              <RefreshCw className="h-5 w-5 text-white" />
+            )}
           </button>
         </ProFeatures>
       </div>
@@ -1260,6 +1259,7 @@ const HydrationAI: React.FC<HydrationAIProps> = ({
                             src={detailedRecipe.image}
                             alt={selectedDrink.name}
                             className="w-full h-full object-cover"
+                            loading="lazy"
                           />
                           <div className="absolute inset-0 bg-gradient-to-t from-background/80 to-transparent" />
                         </motion.div>

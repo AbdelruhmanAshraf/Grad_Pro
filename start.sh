@@ -23,6 +23,15 @@ trap cleanup SIGINT SIGTERM
 
 # 1. Start Python AI Backend
 echo "--> Starting Python AI Backend..."
+
+# Load backend env variables from frontend .env if they exist
+if [ -f "$REACT_DIR/.env.development" ]; then
+    echo "--> Exporting DO_AGENT keys from .env.development..."
+    export DO_AGENT_KEY=$(grep -E "^DO_AGENT_KEY=" "$REACT_DIR/.env.development" | cut -d'=' -f2-)
+    export DO_AGENT_ENDPOINT=$(grep -E "^DO_AGENT_ENDPOINT=" "$REACT_DIR/.env.development" | cut -d'=' -f2-)
+    export DO_AGENT_MODEL=$(grep -E "^DO_AGENT_MODEL=" "$REACT_DIR/.env.development" | cut -d'=' -f2-)
+fi
+
 cd "$PYTHON_DIR" || exit
 
 if [ -d ".venv" ]; then

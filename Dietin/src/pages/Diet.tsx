@@ -1,8 +1,9 @@
 import { useState, useMemo, useEffect, useRef } from "react";
 import { useUserStore } from "@/stores/userStore";
 import { useNutritionStore } from "@/stores/nutritionStore";
-import { AlertCircle, Camera, Loader2, X, Plus, UtensilsCrossed, Utensils, Flame, Dumbbell, Wheat, Droplet, Pencil, ChevronDown, ImageIcon, Sparkles, RefreshCw, Lock, ChevronLeft, CalendarDays, Search } from "lucide-react";
+import { AlertCircle, Camera, X, Plus, UtensilsCrossed, Utensils, Flame, Dumbbell, Wheat, Droplet, Pencil, ChevronDown, ImageIcon, Sparkles, RefreshCw, Lock, ChevronLeft, CalendarDays, Search } from "lucide-react";
 import { motion, AnimatePresence } from "framer-motion";
+import Loader from "@/components/Loader";
 import { cn } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -773,6 +774,7 @@ const Diet = () => {
                                   src={imagePreview}
                                   alt={t('diet.alt.foodPreview')}
                                   className="w-full h-full object-cover"
+                                  loading="lazy"
                                 />
                               </motion.div>
                             )}
@@ -1249,7 +1251,7 @@ const Diet = () => {
                             animate={{ opacity: 1 }}
                             className="flex flex-col items-center justify-center py-8 gap-3"
                           >
-                            <Loader2 className="h-6 w-6 animate-spin text-gray-700" />
+                            <Loader size={24} className="text-gray-700" />
                             <span className="text-sm text-gray-600">Searching for the best matches...</span>
                           </motion.div>
                         ) : searchResults.length > 0 ? (

@@ -1,6 +1,8 @@
 import { useState, useEffect, useMemo, useLayoutEffect } from "react";
 import { AnimatePresence, motion } from "framer-motion";
 import { useUserStore } from "@/stores/userStore";
+import { useNutritionStore } from "@/stores/nutritionStore";
+import { useProgressStore } from "@/stores/progressStore";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import {
   User,
@@ -26,11 +28,15 @@ import {
   FileText,
   Copy,
   Camera,
-  Brain,
   ChartBar,
   Sparkles,
   Languages,
-  Database
+  Database,
+  Flame,
+  GlassWater,
+  Pizza,
+  Drumstick,
+  Droplet
 } from "lucide-react";
 import { format } from "date-fns";
 import { doc, getDoc, updateDoc, onSnapshot } from "firebase/firestore";
@@ -38,6 +44,7 @@ import { onAuthStateChanged } from "firebase/auth";
 import { db, auth } from "@/lib/firebase";
 import { toast } from "sonner";
 import { loadDemoData } from "@/lib/demoData";
+import { boundedNumber } from "@/lib/validation/schemas";
 import SettingsPanel from "@/components/SettingsPanel";
 import { cn } from "@/lib/utils";
 import BMIIndicator from "@/components/BMIIndicator";
@@ -360,10 +367,8 @@ const Profile = () => {
     {
       section: t('profile.profilePage.menu.health'),
       items: [
-        { id: 'measurements', icon: Scale, label: t('profile.profilePage.menu.measurements'), sublabel: t('profile.profilePage.menu.measurementsSub'), onClick: () => setIsMeasurementsOpen(true) },
         { id: 'healthGoals', icon: Heart, label: t('profile.profilePage.menu.healthGoals'), sublabel: t('profile.profilePage.menu.healthGoalsSub'), onClick: () => setIsHealthGoalsOpen(true) },
-        ...(user?.isPro ? [{ id: 'moodTracker', icon: Smile, label: t('profile.profilePage.menu.moodTracker'), sublabel: t('profile.profilePage.menu.moodTrackerSub'), onClick: () => setIsMoodTrackerOpen(true) }] : [] as any),
-        { id: 'analytics', icon: BarChart, label: t('profile.profilePage.menu.analytics'), sublabel: t('profile.profilePage.menu.analyticsSub'), onClick: () => setIsAnalyticsOpen(true) }
+        ...(user?.isPro ? [{ id: 'moodTracker', icon: Smile, label: t('profile.profilePage.menu.moodTracker'), sublabel: t('profile.profilePage.menu.moodTrackerSub'), onClick: () => setIsMoodTrackerOpen(true) }] : [] as any)
       ]
     },
     {
@@ -470,7 +475,16 @@ const Profile = () => {
     </div>
   );
 
-  const HealthGoalsView = () => (
+  const HealthGoalsView = () => {
+    const today = new Date().toISOString().split('T')[0];
+    const dailyData = user?.dailyCalories?.[today] || { totalCalories: 0, totalProtein: 0, totalCarbs: 0, totalFat: 0 };
+    const { hydrationDaily } = useProgressStore();
+    const waterIntake = hydrationDaily[today] || 0;
+    const waterGoal = 2500;
+    const { burnedCalories } = useNutritionStore();
+    const burnGoal = user?.metabolism || 2200;
+
+    return (
     <div className="space-y-6">
       {/* Header */}
       <div className="flex justify-between items-center pt-2">
@@ -488,119 +502,203 @@ const Profile = () => {
         <span className="text-sm font-medium">{t('common.back')}</span>
       </motion.button>
 
-      <div className="space-y-6">
-        <div className="bg-white/80 backdrop-blur-xl rounded-2xl shadow-sm border border-white/20 p-6">
-          <div className="flex items-center justify-between mb-6">
-            <h3 className="text-lg font-semibold text-gray-900">{t('profile.profilePage.healthGoals.nutrition')}</h3>
-            <button
-              onClick={() => setIsEditing(!isEditing)}
-              className="p-2 hover:bg-gray-50 rounded-lg transition-colors"
-            >
+      <div className="bg-white/80 backdrop-blur-xl rounded-2xl shadow-sm border border-white/20 p-6">
+        <div className="flex items-center justify-between mb-6">
+          <h3 className="text-lg font-semibold text-gray-900">{t('profile.profilePage.healthGoals.nutrition')}</h3>
+          <button
+            onClick={() => setIsEditing(!isEditing)}
+            className="p-2 hover:bg-gray-50 rounded-lg transition-colors"
+          >
+            {isEditing ? (
+              <Save className="w-5 h-5 text-gray-600" onClick={handleSaveGoals} />
+            ) : (
+              <Settings className="w-5 h-5 text-gray-600" />
+            )}
+          </button>
+        </div>
+
+        <div className="grid grid-cols-2 gap-4">
+          {/* Calories */}
+          <div className="bg-white p-4 rounded-xl shadow-sm border border-gray-100 flex flex-col justify-between aspect-square">
+            <div className="flex items-center gap-2">
+              <div className="p-2 bg-orange-50 rounded-lg">
+                <Flame className="w-5 h-5 text-orange-500" />
+              </div>
+              <span className="font-semibold text-sm text-gray-700">{t('profile.profilePage.healthGoals.dailyCalories')}</span>
+            </div>
+            <div className="mt-4">
               {isEditing ? (
-                <Save className="w-5 h-5 text-gray-600" onClick={handleSaveGoals} />
-              ) : (
-                <Settings className="w-5 h-5 text-gray-600" />
-              )}
-            </button>
-          </div>
-
-          <div className="space-y-6">
-            {/* Calories */}
-            <div className="space-y-2">
-              <div className="flex justify-between items-center">
-                <label className="text-sm font-medium text-gray-700">{t('profile.profilePage.healthGoals.dailyCalories')}</label>
-                {isEditing ? (
                   <input
                     type="number"
+                    min={0}
+                    max={10000}
                     value={goals.calories}
-                    onChange={(e) => setGoals(prev => ({ ...prev, calories: parseInt(e.target.value) }))}
-                    className="w-24 px-3 py-1 text-right border rounded-lg focus:outline-none focus:ring-2 focus:ring-purple-500"
-                  />
-                ) : (
-                  <span className="text-sm font-semibold">{goals.calories} {t('common.units.kcal')}</span>
-                )}
-              </div>
-              <div className="h-2 bg-gray-100 rounded-full overflow-hidden">
-                <div
-                  className="h-full bg-gradient-to-r from-purple-500 to-pink-500 transition-all duration-300"
-                  style={{ width: `${Math.min(((user?.dailyCalories?.[new Date().toISOString().split('T')[0]]?.totalCalories || 0) / goals.calories) * 100, 100)}%` }}
+                  onChange={(e) => setGoals(prev => ({ ...prev, calories: boundedNumber(e.target.value, 0, 10000, 0) }))}
+                  className="w-full px-2 py-1 text-lg font-bold border rounded-lg focus:outline-none focus:ring-2 focus:ring-orange-500"
                 />
-              </div>
+              ) : (
+                <div className="flex items-baseline gap-1">
+                  <span className="text-2xl font-bold text-gray-900">{dailyData.totalCalories}</span>
+                  <span className="text-sm text-gray-500">/ {goals.calories} kcal</span>
+                </div>
+              )}
             </div>
-
-            {/* Protein */}
-            <div className="space-y-2">
-              <div className="flex justify-between items-center">
-                <label className="text-sm font-medium text-gray-700">{t('profile.profilePage.healthGoals.proteinGoal')}</label>
-                {isEditing ? (
-                  <input
-                    type="number"
-                    value={goals.protein}
-                    onChange={(e) => setGoals(prev => ({ ...prev, protein: parseInt(e.target.value) }))}
-                    className="w-24 px-3 py-1 text-right border rounded-lg focus:outline-none focus:ring-2 focus:ring-purple-500"
-                  />
-                ) : (
-                  <span className="text-sm font-semibold">{goals.protein}{t('common.units.gramShort')}</span>
-                )}
-              </div>
-              <div className="h-2 bg-gray-100 rounded-full overflow-hidden">
-                <div
-                  className="h-full bg-gradient-to-r from-green-500 to-green-600 transition-all duration-300"
-                  style={{ width: `${Math.min(((user?.dailyCalories?.[new Date().toISOString().split('T')[0]]?.totalProtein || 0) / goals.protein) * 100, 100)}%` }}
-                />
-              </div>
-            </div>
-
-            {/* Carbs */}
-            <div className="space-y-2">
-              <div className="flex justify-between items-center">
-                <label className="text-sm font-medium text-gray-700">{t('profile.profilePage.healthGoals.carbsGoal')}</label>
-                {isEditing ? (
-                  <input
-                    type="number"
-                    value={goals.carbs}
-                    onChange={(e) => setGoals(prev => ({ ...prev, carbs: parseInt(e.target.value) }))}
-                    className="w-24 px-3 py-1 text-right border rounded-lg focus:outline-none focus:ring-2 focus:ring-purple-500"
-                  />
-                ) : (
-                  <span className="text-sm font-semibold">{goals.carbs}{t('common.units.gramShort')}</span>
-                )}
-              </div>
-              <div className="h-2 bg-gray-100 rounded-full overflow-hidden">
-                <div
-                  className="h-full bg-gradient-to-r from-yellow-500 to-yellow-600 transition-all duration-300"
-                  style={{ width: `${Math.min(((user?.dailyCalories?.[new Date().toISOString().split('T')[0]]?.totalCarbs || 0) / goals.carbs) * 100, 100)}%` }}
-                />
-              </div>
-            </div>
-
-            {/* Fat */}
-            <div className="space-y-2">
-              <div className="flex justify-between items-center">
-                <label className="text-sm font-medium text-gray-700">{t('profile.profilePage.healthGoals.fatGoal')}</label>
-                {isEditing ? (
-                  <input
-                    type="number"
-                    value={goals.fat}
-                    onChange={(e) => setGoals(prev => ({ ...prev, fat: parseInt(e.target.value) }))}
-                    className="w-24 px-3 py-1 text-right border rounded-lg focus:outline-none focus:ring-2 focus:ring-purple-500"
-                  />
-                ) : (
-                  <span className="text-sm font-semibold">{goals.fat}{t('common.units.gramShort')}</span>
-                )}
-              </div>
-              <div className="h-2 bg-gray-100 rounded-full overflow-hidden">
-                <div
-                  className="h-full bg-gradient-to-r from-red-500 to-red-600 transition-all duration-300"
-                  style={{ width: `${Math.min(((user?.dailyCalories?.[new Date().toISOString().split('T')[0]]?.totalFat || 0) / goals.fat) * 100, 100)}%` }}
-                />
-              </div>
+            <div className="h-2 bg-gray-100 rounded-full mt-4 overflow-hidden">
+              <div
+                className="h-full bg-gradient-to-r from-orange-400 to-orange-500 transition-all duration-300"
+                style={{ width: `${Math.min((dailyData.totalCalories / Math.max(1, goals.calories)) * 100, 100)}%` }}
+              />
             </div>
           </div>
+
+          {/* Protein */}
+          <div className="bg-white p-4 rounded-xl shadow-sm border border-gray-100 flex flex-col justify-between aspect-square">
+            <div className="flex items-center gap-2">
+              <div className="p-2 bg-red-50 rounded-lg">
+                <Drumstick className="w-5 h-5 text-red-500" />
+              </div>
+              <span className="font-semibold text-sm text-gray-700">{t('profile.profilePage.healthGoals.proteinGoal')}</span>
+            </div>
+            <div className="mt-4">
+              {isEditing ? (
+                <input
+                  type="number"
+                  min={0}
+                  max={2000}
+                  value={goals.protein}
+                  onChange={(e) => setGoals(prev => ({ ...prev, protein: boundedNumber(e.target.value, 0, 2000, 0) }))}
+                  className="w-full px-2 py-1 text-lg font-bold border rounded-lg focus:outline-none focus:ring-2 focus:ring-red-500"
+                />
+              ) : (
+                <div className="flex items-baseline gap-1">
+                  <span className="text-2xl font-bold text-gray-900">{dailyData.totalProtein}</span>
+                  <span className="text-sm text-gray-500">/ {goals.protein}g</span>
+                </div>
+              )}
+            </div>
+            <div className="h-2 bg-gray-100 rounded-full mt-4 overflow-hidden">
+              <div
+                className="h-full bg-gradient-to-r from-red-400 to-red-500 transition-all duration-300"
+                style={{ width: `${Math.min((dailyData.totalProtein / Math.max(1, goals.protein)) * 100, 100)}%` }}
+              />
+            </div>
+          </div>
+
+          {/* Carbs */}
+          <div className="bg-white p-4 rounded-xl shadow-sm border border-gray-100 flex flex-col justify-between aspect-square">
+            <div className="flex items-center gap-2">
+              <div className="p-2 bg-yellow-50 rounded-lg">
+                <Pizza className="w-5 h-5 text-yellow-500" />
+              </div>
+              <span className="font-semibold text-sm text-gray-700">{t('profile.profilePage.healthGoals.carbsGoal')}</span>
+            </div>
+            <div className="mt-4">
+              {isEditing ? (
+                <input
+                  type="number"
+                  min={0}
+                  max={2000}
+                  value={goals.carbs}
+                  onChange={(e) => setGoals(prev => ({ ...prev, carbs: boundedNumber(e.target.value, 0, 2000, 0) }))}
+                  className="w-full px-2 py-1 text-lg font-bold border rounded-lg focus:outline-none focus:ring-2 focus:ring-yellow-500"
+                />
+              ) : (
+                <div className="flex items-baseline gap-1">
+                  <span className="text-2xl font-bold text-gray-900">{dailyData.totalCarbs}</span>
+                  <span className="text-sm text-gray-500">/ {goals.carbs}g</span>
+                </div>
+              )}
+            </div>
+            <div className="h-2 bg-gray-100 rounded-full mt-4 overflow-hidden">
+              <div
+                className="h-full bg-gradient-to-r from-yellow-400 to-yellow-500 transition-all duration-300"
+                style={{ width: `${Math.min((dailyData.totalCarbs / Math.max(1, goals.carbs)) * 100, 100)}%` }}
+              />
+            </div>
+          </div>
+
+          {/* Fat */}
+          <div className="bg-white p-4 rounded-xl shadow-sm border border-gray-100 flex flex-col justify-between aspect-square">
+            <div className="flex items-center gap-2">
+              <div className="p-2 bg-green-50 rounded-lg">
+                <Droplet className="w-5 h-5 text-green-500" />
+              </div>
+              <span className="font-semibold text-sm text-gray-700">{t('profile.profilePage.healthGoals.fatGoal')}</span>
+            </div>
+            <div className="mt-4">
+              {isEditing ? (
+                <input
+                  type="number"
+                  min={0}
+                  max={2000}
+                  value={goals.fat}
+                  onChange={(e) => setGoals(prev => ({ ...prev, fat: boundedNumber(e.target.value, 0, 2000, 0) }))}
+                  className="w-full px-2 py-1 text-lg font-bold border rounded-lg focus:outline-none focus:ring-2 focus:ring-green-500"
+                />
+              ) : (
+                <div className="flex items-baseline gap-1">
+                  <span className="text-2xl font-bold text-gray-900">{dailyData.totalFat}</span>
+                  <span className="text-sm text-gray-500">/ {goals.fat}g</span>
+                </div>
+              )}
+            </div>
+            <div className="h-2 bg-gray-100 rounded-full mt-4 overflow-hidden">
+              <div
+                className="h-full bg-gradient-to-r from-green-400 to-green-500 transition-all duration-300"
+                style={{ width: `${Math.min((dailyData.totalFat / Math.max(1, goals.fat)) * 100, 100)}%` }}
+              />
+            </div>
+          </div>
+
+          {/* Burn Calories */}
+          <div className="bg-white p-4 rounded-xl shadow-sm border border-gray-100 flex flex-col justify-between aspect-square">
+            <div className="flex items-center gap-2">
+              <div className="p-2 bg-purple-50 rounded-lg">
+                <Zap className="w-5 h-5 text-purple-500" />
+              </div>
+              <span className="font-semibold text-sm text-gray-700">Burn Calories</span>
+            </div>
+            <div className="mt-4">
+              <div className="flex items-baseline gap-1">
+                <span className="text-2xl font-bold text-gray-900">{burnedCalories || 0}</span>
+                <span className="text-sm text-gray-500">/ {burnGoal} kcal</span>
+              </div>
+            </div>
+            <div className="h-2 bg-gray-100 rounded-full mt-4 overflow-hidden">
+              <div
+                className="h-full bg-gradient-to-r from-purple-400 to-purple-500 transition-all duration-300"
+                style={{ width: `${Math.min(((burnedCalories || 0) / Math.max(1, burnGoal)) * 100, 100)}%` }}
+              />
+            </div>
+          </div>
+
+          {/* Water Daily Goal */}
+          <div className="bg-white p-4 rounded-xl shadow-sm border border-gray-100 flex flex-col justify-between aspect-square">
+            <div className="flex items-center gap-2">
+              <div className="p-2 bg-blue-50 rounded-lg">
+                <GlassWater className="w-5 h-5 text-blue-500" />
+              </div>
+              <span className="font-semibold text-sm text-gray-700">Water Goal</span>
+            </div>
+            <div className="mt-4">
+              <div className="flex items-baseline gap-1">
+                <span className="text-2xl font-bold text-gray-900">{waterIntake}</span>
+                <span className="text-sm text-gray-500">/ {waterGoal} ml</span>
+              </div>
+            </div>
+            <div className="h-2 bg-gray-100 rounded-full mt-4 overflow-hidden">
+              <div
+                className="h-full bg-gradient-to-r from-blue-400 to-blue-500 transition-all duration-300"
+                style={{ width: `${Math.min((waterIntake / Math.max(1, waterGoal)) * 100, 100)}%` }}
+              />
+            </div>
+          </div>
+
         </div>
       </div>
     </div>
   );
+  };
 
   const MoodTrackerView = () => (
     <div className="space-y-6">

@@ -5,6 +5,7 @@ import { useUserStore } from '@/stores/userStore';
 import { UserProfile, ActivityLevel, ExperienceLevel, WorkoutDays, Gender, Budget, Goal } from '@/lib/types';
 import { cn } from '@/lib/utils';
 import { LanguageSwitcher } from '@/components/LanguageSwitcher';
+import Loader from './Loader';
 import {
   ChevronRight,
   ChevronLeft,
@@ -54,6 +55,7 @@ import { doc, setDoc, getDoc, updateDoc } from 'firebase/firestore';
 import { signOut } from 'firebase/auth';
 import { auth, db } from '@/lib/firebase';
 import { toast } from 'sonner';
+import { weightKg, heightCm } from '@/lib/validation/schemas';
 import { Line } from 'react-chartjs-2';
 import ProSubscriptionPanel from './ProSubscriptionPanel';
 import HealthDisclaimerModal from './HealthDisclaimerModal';
@@ -225,6 +227,7 @@ const IntroStep = ({ onComplete }: { onComplete: () => void }) => {
               src={slide.image} 
               alt={slide.title} 
               className="w-full h-full max-h-[45vh] object-contain" 
+              loading="lazy"
             />
           </div>
         </motion.div>
@@ -286,7 +289,7 @@ export function Welcome() {
   const [lastInteractionTime, setLastInteractionTime] = useState(0);
   const [useMetric, setUseMetric] = useState(true);
   const [isProPanelOpen, setIsProPanelOpen] = useState(false);
-  const [showHealthDisclaimer, setShowHealthDisclaimer] = useState(false);
+  const [showDisclaimer, setShowDisclaimer] = useState(false);
 
   // Deterministic, rule-based name validation
   const validateName = (raw: string): boolean => {
@@ -577,6 +580,8 @@ export function Welcome() {
 
         // Status and timestamps
         onboardingCompleted: true,
+        healthDisclaimerAccepted: true,
+        healthDisclaimerAcceptedAt: new Date().toISOString(),
         lastUpdated: new Date().toISOString(),
 
         // Analytics & Stats
@@ -623,8 +628,8 @@ export function Welcome() {
         }
         updateUser(baseUserData);
 
-        // Show disclaimer instead of navigating directly
-        setShowHealthDisclaimer(true);
+        // We do NOT navigate to /home here. App.tsx's useEffect will see onboardingCompleted is true
+        // and handle rendering the HealthDisclaimerModal automatically over the routes.
       } else {
         throw new Error('No authenticated user found');
       }
@@ -742,22 +747,32 @@ export function Welcome() {
     } as const;
   };
 
-  // Add validation helper
+  // Validation helpers — imperative UX bounds (120-220 cm / 30-180 kg) still
+  // apply here for the onboarding-step "Continue" gate. Actual persistence to
+  // Firestore is re-checked with the shared zod bounds (weightKg 1..500,
+  // heightCm 50..300) so DevTools tampering that bypasses these narrower
+  // ranges is still caught before write.
   const isHeightValid = () => {
     if (useMetric) {
-      return !!formData.height && formData.height >= 120 && formData.height <= 220;
+      if (!formData.height) return false;
+      if (!heightCm.safeParse(formData.height).success) return false;
+      return formData.height >= 120 && formData.height <= 220;
     } else {
       const heightFt = formData.heightFt || 0;
       const heightIn = formData.heightIn || 0;
-      return heightFt >= 4 && heightFt <= 7 && heightIn >= 0 && heightIn <= 11;
+      if (heightFt < 4 || heightFt > 7 || heightIn < 0 || heightIn > 11) return false;
+      const cm = heightFt * 30.48 + heightIn * 2.54;
+      return heightCm.safeParse(cm).success;
     }
   };
 
   const isWeightValid = () => {
     if (!formData.weight) return false;
-    return useMetric ?
-      formData.weight >= 30 && formData.weight <= 180 :
-      formData.weight >= 66 && formData.weight <= 400;
+    const kg = useMetric ? formData.weight : formData.weight * 0.453592;
+    if (!weightKg.safeParse(kg).success) return false;
+    return useMetric
+      ? formData.weight >= 30 && formData.weight <= 180
+      : formData.weight >= 66 && formData.weight <= 400;
   };
 
   // Update step validation
@@ -1406,12 +1421,12 @@ export function Welcome() {
 
             {step === steps.length - 1 && (
               <button
-                onClick={handleGetStarted}
+                onClick={() => setShowDisclaimer(true)}
                 disabled={isLoading}
                 className="w-full px-6 py-4 rounded-2xl font-medium transition-all duration-300 bg-black text-white hover:bg-black/90 flex justify-center items-center gap-2"
               >
                 {isLoading ? (
-                  <span className="w-5 h-5 border-2 border-white/30 border-t-white rounded-full animate-spin" />
+                  <Loader size={20} className="w-5 h-5 text-white" />
                 ) : (
                   t('welcome.cta.getStarted', 'Get Started')
                 )}
@@ -1439,11 +1454,12 @@ export function Welcome() {
         isOpen={isProPanelOpen}
         onClose={() => setIsProPanelOpen(false)}
       />
-      
+
       <HealthDisclaimerModal
-        isOpen={showHealthDisclaimer}
-        onClose={() => setShowHealthDisclaimer(false)}
-        onAgree={() => navigate('/home')}
+        isOpen={showDisclaimer}
+        onClose={() => setShowDisclaimer(false)}
+        onAgree={handleGetStarted}
+        isLoading={isLoading}
       />
       </div>
     </motion.div>

@@ -32,9 +32,9 @@ export function BeforeAfterSlider({ beforeUrl, afterUrl, beforeLabel, afterLabel
         updateFromClientX(e.clientX);
       }}
     >
-      <img src={afterUrl} alt={afterLabel ?? "after"} className="absolute inset-0 w-full h-full object-cover" draggable={false} />
+      <img src={afterUrl} alt={afterLabel ?? "after"} className="absolute inset-0 w-full h-full object-cover" draggable={false} loading="lazy" />
       <div className="absolute inset-0 overflow-hidden" style={{ width: `${pos}%` }}>
-        <img src={beforeUrl} alt={beforeLabel ?? "before"} className="absolute inset-0 h-full w-[200%] object-cover" style={{ left: 0 }} draggable={false} />
+        <img src={beforeUrl} alt={beforeLabel ?? "before"} className="absolute inset-0 h-full w-[200%] object-cover" style={{ left: 0 }} draggable={false} loading="lazy" />
       </div>
       {/* Divider */}
       <div className="absolute top-0 bottom-0 w-0.5 bg-white shadow-md pointer-events-none" style={{ left: `${pos}%` }} aria-hidden>

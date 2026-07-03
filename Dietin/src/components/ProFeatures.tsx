@@ -11,28 +11,32 @@ interface ProFeaturesProps {
 export default function ProFeatures({ children, showOnlyForNonPro = false }: ProFeaturesProps) {
   const [isPro, setIsPro] = useState<boolean>(false);
   const [isLoading, setIsLoading] = useState(true);
+  const storeUser = useUserStore((state) => state.user);
 
   useEffect(() => {
-    // Only set up listener if user is authenticated
-    if (!auth.currentUser) {
-      setIsLoading(false);
-      return;
-    }
+    // Prefer the already-loaded user store value so the initial render is correct.
+    setIsPro(!!storeUser?.isPro);
+    setIsLoading(false);
 
-    // Set up real-time listener for user's pro status
-    const unsubscribe = onSnapshot(doc(db, "users", auth.currentUser.uid), (doc) => {
-      if (doc.exists()) {
-        const userData = doc.data();
-        setIsPro(userData.isPro || false);
-      } else {
-        setIsPro(false);
+    // Keep in sync with Firestore in case the store hasn't finished loading or
+    // the pro status changes on another device.
+    const uid = auth.currentUser?.uid;
+    if (!uid) return;
+
+    const unsubscribe = onSnapshot(
+      doc(db, "users", uid),
+      (snapshot) => {
+        const data = snapshot.data();
+        setIsPro(!!data?.isPro);
+      },
+      () => {
+        // On snapshot error, fall back to the store value.
+        setIsPro(!!storeUser?.isPro);
       }
-      setIsLoading(false);
-    });
+    );
 
-    // Cleanup subscription
     return () => unsubscribe();
-  }, []);
+  }, [storeUser?.isPro]);
 
   if (isLoading) {
     return null;

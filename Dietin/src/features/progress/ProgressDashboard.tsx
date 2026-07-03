@@ -16,7 +16,12 @@ import {
   Sparkles,
   Trophy,
   TrendingUp,
+  LineChart,
 } from "lucide-react";
+import BMIIndicator from "@/components/BMIIndicator";
+import ProgressChart from "@/components/ProgressChart";
+import MacroBarChart from "@/components/MacroBarChart";
+import MuscleRadarChart from "@/components/MuscleRadarChart";
 import { useUserStore } from "@/stores/userStore";
 import { useProgressStore } from "@/stores/progressStore";
 import { auth } from "@/lib/firebase";
@@ -137,7 +142,13 @@ export default function ProgressDashboard() {
       case "photos":
         return <PhotosSection />;
       case "body":
-        return <MeasurementsSection />;
+        return (
+          <div className="space-y-6">
+            <BMIIndicator />
+            <ProgressChart />
+            <MeasurementsSection />
+          </div>
+        );
       case "score":
         return (
           <div className="grid gap-4 md:grid-cols-2">
@@ -148,7 +159,13 @@ export default function ProgressDashboard() {
       case "streaks":
         return <StreaksSection />;
       case "workouts":
-        return <WorkoutAnalyticsSection />;
+        return (
+          <div className="space-y-6">
+            <WorkoutAnalyticsSection />
+            <MuscleRadarChart />
+            <MacroBarChart />
+          </div>
+        );
       case "prs":
         return <PersonalRecordsSection />;
       case "ai":
@@ -159,6 +176,22 @@ export default function ProgressDashboard() {
       default:
         return (
           <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-3">
+            {/* Added from Measurements */}
+            <div className="md:col-span-2 xl:col-span-1">
+              <BMIIndicator />
+            </div>
+            <div className="md:col-span-2 xl:col-span-2">
+              <ProgressChart />
+            </div>
+
+            {/* Added from Analytics */}
+            <div className="md:col-span-2 xl:col-span-2">
+              <MacroBarChart />
+            </div>
+            <div className="md:col-span-2 xl:col-span-1">
+              <MuscleRadarChart />
+            </div>
+
             <WeightJourneySection />
             <WeeklyTrendSection />
             <FitnessScoreSection />
@@ -194,7 +227,6 @@ export default function ProgressDashboard() {
           <h1 className="text-[1.75rem] tracking-tight text-gray-900 dark:text-white font-sf-display font-sf-bold">
             {t("plan.progress", { defaultValue: "Progress" })}
           </h1>
-          {user && (
             <div className="flex justify-center w-full -mt-1">
               <div className="bg-gray-100 dark:bg-white/5 rounded-full p-1 flex items-center shadow-md border border-gray-200/50 dark:border-white/10">
                 <Link to="/plan" className="px-5 py-2 rounded-full flex items-center gap-2.5 transition-all duration-200 hover:bg-white/70 dark:hover:bg-white/10">
@@ -205,9 +237,12 @@ export default function ProgressDashboard() {
                   <span className="text-sm font-medium text-gray-600 dark:text-text-muted">{t("plan.library")}</span>
                   <Dumbbell className="w-4 h-4 text-gray-600 dark:text-text-muted" />
                 </Link>
-                </div>
+                <Link to="/progress" className="px-5 py-2 rounded-full bg-white dark:bg-white/10 shadow-sm flex items-center gap-2.5 transition-all duration-200 border border-gray-100 dark:border-white/10">
+                  <span className="text-sm font-medium text-gray-900 dark:text-white">{t("plan.progress")}</span>
+                  <LineChart className="w-4 h-4 text-primary dark:text-white" />
+                </Link>
+              </div>
             </div>
-          )}
         </header>
 
         <div className="sticky top-0 z-10 -mx-4 sm:mx-0 px-4 sm:px-0 py-2 backdrop-blur-md bg-white/70 dark:bg-bg-DEFAULT/70 supports-[backdrop-filter]:bg-white/60">

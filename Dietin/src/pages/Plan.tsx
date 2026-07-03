@@ -8,10 +8,11 @@ import { isAiConfigured } from '@/lib/aiCoachApi';
 import { Sparkles } from 'lucide-react';
 import { useTranslation } from 'react-i18next';
 import { 
-  ChevronRight, X, Loader2,
+  ChevronRight, X,
   ArrowLeft, RefreshCw, Info, Heart, HeartOff,
-  Play, Plus, Minus, Check, Activity, Edit2, RotateCcw, ChevronDown, AlertTriangle, Dumbbell, ClipboardList, Moon, Wind, Bed, Droplets, Apple, Brain, Search, ArrowDown, Timer, BarChart3, ChevronLeft, FiPlus
+  Play, Plus, Minus, Check, Activity, Edit2, RotateCcw, ChevronDown, AlertTriangle, Dumbbell, ClipboardList, Moon, Wind, Bed, Droplets, Apple, Brain, Search, ArrowDown, Timer, BarChart3, ChevronLeft, FiPlus, LineChart
 } from 'lucide-react';
+import Loader from "@/components/Loader";
 import { Button } from '@/components/ui/button';
 import { Card, CardContent } from '@/components/ui/card';
 import { cn } from '@/lib/utils';
@@ -460,6 +461,12 @@ const Plan = () => {
       document.body.style.position = '';
       document.body.style.width = '';
     }
+    return () => {
+      document.body.style.overflow = '';
+      document.body.style.touchAction = '';
+      document.body.style.position = '';
+      document.body.style.width = '';
+    };
   }, [showExerciseModal]);
 
   const selectExercisesForDay = (muscleGroup: MuscleGroup, day: number) => {
@@ -1645,6 +1652,13 @@ const Plan = () => {
                     <span className="text-sm font-medium text-gray-600">{t('plan.library')}</span>
                     <Dumbbell className="w-4 h-4 text-gray-600" />
                   </Link>
+                  <Link
+                    to="/progress"
+                    className="px-5 py-2 rounded-full flex items-center gap-2.5 transition-all duration-200 hover:bg-white/70"
+                  >
+                    <span className="text-sm font-medium text-gray-600">{t('plan.progress')}</span>
+                    <LineChart className="w-4 h-4 text-gray-600" />
+                  </Link>
                 </div>
               </motion.div>
             )}
@@ -2714,6 +2728,7 @@ const Plan = () => {
                         src={selectedExercise.images[currentImageIndex]}
                         alt={`${selectedExercise.name} - ${currentImageIndex === 0 ? 'Start' : 'End'} position`}
                         className="w-full h-full object-contain rounded-xl"
+                        loading="lazy"
                       />
                     </div>
 
@@ -3238,7 +3253,7 @@ const Plan = () => {
                             <RestDayView />
                           ) : isLoading ? (
                             <div className="flex items-center justify-center py-8">
-                              <Loader2 className="w-6 h-6 animate-spin text-primary" />
+                              <Loader size={24} className="text-primary" />
                             </div>
                           ) : filteredExercises.length > 0 ? (
                             filteredExercises.map((exercise) => {
@@ -3262,6 +3277,7 @@ const Plan = () => {
                                           src={exercise.images[0]} 
                                           alt={exercise.name}
                                           className="w-full h-full object-cover"
+                                          loading="lazy"
                                         />
                                       ) : (
                                         <div className="w-full h-full flex items-center justify-center bg-black/20">

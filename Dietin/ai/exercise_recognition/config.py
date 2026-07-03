@@ -86,9 +86,10 @@ class Settings:
     default_rest_timer: int = 60
 
     # Session lifecycle
-    session_idle_timeout_s: int = 600         # 10 min without a frame -> stale
+    session_idle_timeout_s: int = 300         # 5 min without a frame -> stale
     session_max_age_s: int = 4 * 60 * 60      # 4 h absolute lifetime
     session_cleanup_interval_s: int = 60      # background sweep cadence
+    session_max_active: int = 200             # global concurrent session cap
 
     # CORS allowlist. Override at deploy time with the AI_CORS_ORIGINS env var.
     cors_origins: Tuple[str, ...] = field(default_factory=_resolve_cors_origins)

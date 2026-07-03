@@ -1,15 +1,17 @@
 import { motion, AnimatePresence } from "framer-motion";
-import { X, ShieldCheck, Sparkles, Activity, Asterisk } from "lucide-react";
+import { X, ShieldCheck, Sparkles, Activity, Asterisk, ShieldAlert } from "lucide-react";
 import { useTranslation } from "react-i18next";
 import { cn } from "@/lib/utils";
+import Loader from "./Loader";
 
 interface HealthDisclaimerModalProps {
   isOpen: boolean;
   onClose: () => void;
   onAgree: () => void;
+  isLoading?: boolean;
 }
 
-export default function HealthDisclaimerModal({ isOpen, onClose, onAgree }: HealthDisclaimerModalProps) {
+export default function HealthDisclaimerModal({ isOpen, onClose, onAgree, isLoading }: HealthDisclaimerModalProps) {
   const { t } = useTranslation();
 
   return (
@@ -21,7 +23,6 @@ export default function HealthDisclaimerModal({ isOpen, onClose, onAgree }: Heal
             animate={{ opacity: 1 }}
             exit={{ opacity: 0 }}
             className="fixed inset-0 bg-black/60 z-[99999]"
-            onClick={onClose}
           />
           <motion.div
             initial={{ y: "100%" }}
@@ -32,19 +33,13 @@ export default function HealthDisclaimerModal({ isOpen, onClose, onAgree }: Heal
           >
             {/* Header */}
             <div className="relative flex items-center justify-center mb-6">
-              <button
-                onClick={onClose}
-                className="absolute left-0 p-2 bg-gray-100 rounded-full hover:bg-gray-200 transition-colors"
-              >
-                <X size={20} className="text-gray-900" />
-              </button>
               <h2 className="text-lg font-bold text-gray-900">Health Disclaimer</h2>
             </div>
 
             {/* Icon */}
             <div className="flex justify-center mb-6">
               <div className="w-20 h-20 bg-blue-50 rounded-[24px] flex items-center justify-center">
-                <Asterisk size={40} className="text-blue-500" strokeWidth={3} />
+                <ShieldAlert size={40} className="text-blue-500" strokeWidth={2.5} />
               </div>
             </div>
 
@@ -58,12 +53,12 @@ export default function HealthDisclaimerModal({ isOpen, onClose, onAgree }: Heal
               {/* Item 1 */}
               <div className="flex gap-4">
                 <div className="mt-1">
-                  <Activity size={24} className="text-red-500" />
+                  <Asterisk size={24} className="text-red-500" />
                 </div>
                 <div>
                   <h3 className="text-lg font-bold text-gray-900 mb-1">Not Medical Advice</h3>
                   <p className="text-gray-500 text-[15px] leading-snug">
-                    Consult a professional before changing your diet. This app is for tracking, not diagnosis.
+                    Consult a healthcare professional before making major dietary or fitness changes. Dietin is designed for tracking and educational purposes only.
                   </p>
                 </div>
               </div>
@@ -76,7 +71,7 @@ export default function HealthDisclaimerModal({ isOpen, onClose, onAgree }: Heal
                 <div>
                   <h3 className="text-lg font-bold text-gray-900 mb-1">AI Estimations</h3>
                   <p className="text-gray-500 text-[15px] leading-snug">
-                    Nutritional values are estimates and not 100% guaranteed.
+                    Nutrition values, calorie estimates, and AI-generated recommendations may not always be 100% accurate.
                   </p>
                 </div>
               </div>
@@ -87,27 +82,32 @@ export default function HealthDisclaimerModal({ isOpen, onClose, onAgree }: Heal
                   <ShieldCheck size={24} className="text-teal-500" />
                 </div>
                 <div>
-                  <h3 className="text-lg font-bold text-gray-900 mb-1">Verified Sources</h3>
+                  <h3 className="text-lg font-bold text-gray-900 mb-1">Verified Standards</h3>
                   <p className="text-gray-500 text-[15px] leading-snug">
-                    Calculations follow WHO, USDA, and official health standards.
+                    Calculations and recommendations are based on WHO, USDA, and recognized fitness and nutrition guidelines.
                   </p>
                 </div>
               </div>
             </div>
 
             {/* Footer Links */}
-            <div className="flex justify-center gap-3 text-[13px] text-gray-500 font-medium mb-6">
-              <button className="underline underline-offset-2">Privacy</button>
+            <div className="flex justify-center gap-4 text-[13px] text-gray-500 font-medium mb-6">
+              <button className="underline underline-offset-2 hover:text-gray-900 transition-colors">Privacy Policy</button>
               <span>•</span>
-              <button className="underline underline-offset-2">Terms</button>
+              <button className="underline underline-offset-2 hover:text-gray-900 transition-colors">Terms of Service</button>
             </div>
 
             {/* Agree Button */}
             <button
               onClick={onAgree}
-              className="w-full bg-[#1a1f2e] text-white rounded-full py-4 text-[17px] font-semibold hover:bg-black transition-colors"
+              disabled={isLoading}
+              className="w-full bg-[#1a1f2e] text-white rounded-full py-4 text-[17px] font-semibold hover:bg-black transition-colors flex justify-center items-center gap-2"
             >
-              I Understand & Agree
+              {isLoading ? (
+                <Loader size={20} className="w-5 h-5 text-white" />
+              ) : (
+                "Agree & Continue"
+              )}
             </button>
           </motion.div>
         </>

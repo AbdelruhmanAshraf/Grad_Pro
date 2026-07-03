@@ -596,7 +596,10 @@
   },
   "plusButton": {
     "workoutPlan": "Workout Plan",
-    "mealLogging": "Meal Logging"
+    "mealLogging": "Meal Logging",
+    "hydration": "Hydration",
+    "burn": "Burn Tracker",
+    "addFood": "Add Food"
   },
   "mealAnalysis": {
     "saveSuccess": "Meal saved successfully!",

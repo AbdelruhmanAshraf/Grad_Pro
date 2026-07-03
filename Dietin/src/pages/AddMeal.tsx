@@ -5,6 +5,7 @@ import { cn } from "@/lib/utils";
 import { Camera, Pencil, Search, Sparkles, X, Plus, Tag, ChevronLeft, Loader2, BarChart3, Utensils, Flame, Lock } from "lucide-react";
 import { useUserStore } from "@/stores/userStore";
 import { analyzeNutrition, generateJSON, generateText } from "@/lib/gemini";
+import { addMealSchema } from "@/lib/validation/schemas";
 import { db } from "@/lib/firebase";
 import { doc, getDoc, increment } from "firebase/firestore";
 import { auth } from "@/lib/firebase";
@@ -950,13 +951,27 @@ const AddMeal = () => {
   const handleSaveMeal = () => {
     if (!isFormValid) return;
 
-    const entry = {
-      description: mealTitle,
-      foodName: mealTitle,
+    const parsedMacros = addMealSchema.safeParse({
+      name: mealTitle,
       calories: Number(calories),
       protein: Number(protein),
       carbs: Number(carbs),
       fat: Number(fat),
+    });
+    if (!parsedMacros.success) {
+      window.dispatchEvent(new CustomEvent('showErrorToast', {
+        detail: { message: parsedMacros.error.issues[0]?.message || 'Invalid meal values' }
+      }));
+      return;
+    }
+
+    const entry = {
+      description: parsedMacros.data.name,
+      foodName: parsedMacros.data.name,
+      calories: parsedMacros.data.calories,
+      protein: parsedMacros.data.protein,
+      carbs: parsedMacros.data.carbs,
+      fat: parsedMacros.data.fat,
       mealTag: selectedTag || customTag || t('mealAnalysis.tags.meal1'),
       timestamp: new Date().toISOString(),
       healthScore: 50,
@@ -1334,12 +1349,11 @@ const AddMeal = () => {
                     <motion.div
                       className="flex flex-col items-center justify-center h-[78vh] -mt-20 space-y-6"
                     >
-                      <div className="relative w-20 h-20">
-                        <div className="absolute inset-0 rounded-full bg-gradient-to-br from-[#007AFF]/10 to-[#0055FF]/5"></div>
-                        <div className="absolute inset-0 rounded-full border-4 border-[#007AFF]/10"></div>
-                        <div className="absolute inset-0 rounded-full border-4 border-t-[#007AFF] border-r-transparent border-b-transparent border-l-transparent animate-spin"></div>
+                      <div className="relative w-20 h-20 animate-pulse">
+                        <div className="absolute inset-0 rounded-full bg-gradient-to-br from-[#007AFF]/20 to-[#0055FF]/10"></div>
+                        <div className="absolute inset-0 rounded-full border-4 border-[#007AFF]/30"></div>
                         <div className="absolute inset-0 flex items-center justify-center">
-                          <Sparkles className="w-8 h-8 text-[#007AFF] animate-pulse" />
+                          <Sparkles className="w-8 h-8 text-[#007AFF]" />
                         </div>
                       </div>
                       <div className="space-y-2 text-center">
@@ -1689,12 +1703,11 @@ const AddMeal = () => {
                       transition={{ duration: 0.4 }}
                       className="flex flex-col items-center justify-center h-[78vh] -mt-20 space-y-6"
                     >
-                      <div className="relative w-20 h-20">
-                        <div className="absolute inset-0 rounded-full bg-gradient-to-br from-[#007AFF]/10 to-[#0055FF]/5"></div>
-                        <div className="absolute inset-0 rounded-full border-4 border-[#007AFF]/10"></div>
-                        <div className="absolute inset-0 rounded-full border-4 border-t-[#007AFF] border-r-transparent border-b-transparent border-l-transparent animate-spin"></div>
+                      <div className="relative w-20 h-20 animate-pulse">
+                        <div className="absolute inset-0 rounded-full bg-gradient-to-br from-[#007AFF]/20 to-[#0055FF]/10"></div>
+                        <div className="absolute inset-0 rounded-full border-4 border-[#007AFF]/30"></div>
                         <div className="absolute inset-0 flex items-center justify-center">
-                          <Sparkles className="w-8 h-8 text-[#007AFF] animate-pulse" />
+                          <Sparkles className="w-8 h-8 text-[#007AFF]" />
                         </div>
                       </div>
                       <div className="space-y-2 text-center">

@@ -170,7 +170,8 @@ body.no-scroll {
 
 @layer base {
   * {
-    @apply border-border;
+    border: none !important;
+    box-shadow: none !important;
   }
   
   body {

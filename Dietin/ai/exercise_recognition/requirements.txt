@@ -11,3 +11,5 @@ scikit-learn==1.5.0
 matplotlib==3.9.0
 # Phase A security: Firebase ID-token verification on every protected route.
 firebase-admin==6.5.0
+# Phase B security: async HTTP client for Kimi LLM proxy (see app/llm.py).
+httpx==0.27.2

@@ -1,7 +1,8 @@
 import { useRef, useState } from "react";
 import { useDropzone } from "react-dropzone";
-import { Camera, ImageUp, Loader2 } from "lucide-react";
+import { Camera, ImageUp } from "lucide-react";
 import { Button } from "@/components/ui/button";
+import Loader from "@/components/Loader";
 import { cn } from "@/lib/utils";
 import type { PhotoView } from "@/features/progress/types";
 
@@ -49,7 +50,7 @@ export function PhotoUploader({ view, existingUrl, busy, onUpload, onDelete, pla
       >
         <input {...getInputProps()} />
         {existingUrl ? (
-          <img src={existingUrl} alt={labelMap[view]} className="absolute inset-0 w-full h-full object-cover" />
+          <img src={existingUrl} alt={labelMap[view]} className="absolute inset-0 w-full h-full object-cover" loading="lazy" />
         ) : (
           placeholder ?? (
             <div className="flex flex-col items-center text-gray-400 dark:text-text-muted gap-2 px-3 text-center">
@@ -60,7 +61,7 @@ export function PhotoUploader({ view, existingUrl, busy, onUpload, onDelete, pla
         )}
         {busyState && (
           <div className="absolute inset-0 bg-black/30 flex items-center justify-center">
-            <Loader2 className="h-6 w-6 text-white animate-spin" />
+            <Loader size={24} className="text-white" />
           </div>
         )}
         <span className="absolute top-2 left-2 text-[10px] uppercase tracking-wide bg-black/60 text-white px-2 py-0.5 rounded-full">

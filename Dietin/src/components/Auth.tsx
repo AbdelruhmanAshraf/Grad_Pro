@@ -6,13 +6,15 @@ import { auth, db, tryReconnect } from "@/lib/firebase";
 import { signInWithCustomToken, sendPasswordResetEmail, createUserWithEmailAndPassword, signInWithEmailAndPassword, sendEmailVerification, reload, signInWithCredential, GoogleAuthProvider, signInWithPopup } from "firebase/auth";
 import { doc, getDoc, setDoc, updateDoc, collection, query, where, limit as fblimit, getDocs } from "firebase/firestore";
 import { toast } from "@/components/ui/use-toast";
-import { Loader2, ArrowLeft, RefreshCw, MoreHorizontal } from "lucide-react";
+import { ArrowLeft, RefreshCw, MoreHorizontal } from "lucide-react";
 import { Sheet, SheetContent, SheetTrigger, SheetHeader, SheetTitle } from '@/components/ui/sheet';
+import Loader from "./Loader";
 import { FcGoogle } from 'react-icons/fc';
 import { FaEnvelope } from 'react-icons/fa';
 import { useRotatingText } from "@/hooks/useRotatingText";
 // useGoogleLogin removed in favor of standard Firebase auth
 import { useTranslation } from 'react-i18next';
+import { logSecurityEvent } from '@/lib/securityLog';
 import ShapesTrio from '@/assets/Vectors/20250831_0538_Cheerful Shapes Trio_remix_01k3yzrkpee20vrmzy5m9xxnmv.png';
 import { Capacitor } from '@capacitor/core';
 import { FirebaseAuthentication } from '@capacitor-firebase/authentication';
@@ -359,6 +361,7 @@ export const Auth = () => {
       await handleAuthSuccess({ user: cred.user });
       setAllowNavigation(false);
     } catch (e: any) {
+      void logSecurityEvent('login_failed', `email-login: ${e?.code || e?.message || 'unknown'}`);
       setAuthError(e?.message || t('auth.tryAgain', 'Please try again.'));
       toast({ title: t('auth.error', 'Error'), description: e?.message || t('auth.tryAgain', 'Please try again.'), variant: 'destructive' });
     } finally {
@@ -708,7 +711,7 @@ export const Auth = () => {
             <RefreshCw className="w-5 h-5 text-gray-700" />
           </button>
           <div className="flex items-center justify-center">
-            <img src="/11.png" alt="Dietin Logo" className="h-[48px] w-auto object-contain" />
+            <img src="/11.png" alt="Dietin Logo" className="h-[48px] w-auto object-contain" loading="lazy" />
           </div>
           <Sheet>
             <SheetTrigger asChild>
@@ -759,7 +762,7 @@ export const Auth = () => {
                         className="w-full bg-[#1c1c1e] text-white rounded-full py-4 px-5 flex items-center justify-center gap-3 transition-all duration-200 hover:opacity-90 shadow-md"
                       >
                         {isLoading ? (
-                          <Loader2 className="w-5 h-5 animate-spin" />
+                          <Loader size={20} className="w-5 h-5 text-white" />
                         ) : (
                           <>
                             <FcGoogle className="w-5 h-5 bg-white rounded-full" />
@@ -776,14 +779,6 @@ export const Auth = () => {
                         <span className="font-semibold font-inter text-[16px]">{t('auth.continueWithEmail', 'Continue with Email')}</span>
                       </button>
 
-                      {/* Hardcoded Test Account Button */}
-                      <button
-                        onClick={() => handleEmailLogin('abderuhamanelfekky@gmail.com', 'abdo12345')}
-                        disabled={isLoading}
-                        className="w-full bg-gray-100 text-gray-800 rounded-full py-3.5 px-5 flex items-center justify-center gap-3 transition-all duration-200 hover:bg-gray-200 shadow-sm mt-5"
-                      >
-                        <span className="font-medium font-inter text-[16px]">Login with Test Account</span>
-                      </button>
                     </div>
 
                     {authError && (

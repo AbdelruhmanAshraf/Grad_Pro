@@ -1,5 +1,6 @@
 import { motion, AnimatePresence } from "framer-motion";
-import { Check, Rocket, Loader2, ChevronLeft } from "lucide-react";
+import { Check, Rocket, ChevronLeft } from "lucide-react";
+import Loader from "@/components/Loader";
 import { useEffect, useState } from "react";
 import { toast } from "@/components/ui/use-toast";
 import { auth } from "@/lib/firebase";
@@ -92,7 +93,7 @@ const Payment = () => {
   if (isLoading) {
     return (
       <div className="min-h-screen flex items-center justify-center">
-        <Loader2 className="w-8 h-8 animate-spin text-indigo-600" />
+        <Loader size={32} className="text-indigo-600" />
       </div>
     );
   }
@@ -499,9 +500,9 @@ const Payment = () => {
               <button
                 aria-label={t('payment.subscribeNow', { defaultValue: 'Subscribe Now' }) as string}
                 onClick={handlePaymobPayment}
-                className="w-full bg-white border border-white text-transparent font-medium py-4 rounded-full transition-all duration-200 flex items-center justify-center shadow-[0_4px_16px_rgba(0,0,0,0.04)] hover:shadow-[0_4px_20px_rgba(0,0,0,0.05)]"
+                className="w-full bg-[#1a1f2e] text-white font-semibold py-4 rounded-full transition-all duration-200 flex items-center justify-center hover:bg-black"
               >
-                <img src={paymobLogo} alt="Paymob" className="h-5 w-auto" />
+                {t('payment.subscribeNow', { defaultValue: 'Subscribe Now' })}
               </button>
 
               <div className="text-center space-y-2">
@@ -586,7 +587,7 @@ const Payment = () => {
                       )}
                     >
                       {isRedeeming ? (
-                        <Loader2 className="h-4 w-4 animate-spin" />
+                        <Loader size={16} />
                       ) : (
                         t('proPanel.redeem.action', { defaultValue: 'Redeem' })
                       )}

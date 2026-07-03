@@ -1,4 +1,5 @@
 import { create } from 'zustand';
+import { persist } from 'zustand/middleware';
 
 export interface DrinkSuggestion {
   name: string;
@@ -21,10 +22,22 @@ interface HydrationStore {
   setLastDrinkType: (type: string) => void;
 }
 
-export const useHydrationStore = create<HydrationStore>((set) => ({
-  suggestions: [],
-  setSuggestions: (suggestions) => set({ suggestions, lastUpdated: new Date().toISOString() }),
-  lastUpdated: null,
-  lastDrinkType: null,
-  setLastDrinkType: (type) => set({ lastDrinkType: type })
-})); 
+export const useHydrationStore = create<HydrationStore>()(
+  persist(
+    (set) => ({
+      suggestions: [],
+      setSuggestions: (suggestions) => set({ suggestions, lastUpdated: new Date().toISOString() }),
+      lastUpdated: null,
+      lastDrinkType: null,
+      setLastDrinkType: (type) => set({ lastDrinkType: type })
+    }),
+    {
+      name: 'hydration-suggestions',
+      partialize: (state) => ({
+        suggestions: state.suggestions,
+        lastUpdated: state.lastUpdated,
+        lastDrinkType: state.lastDrinkType
+      })
+    }
+  )
+); 

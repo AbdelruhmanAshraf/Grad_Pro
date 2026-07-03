@@ -79,6 +79,7 @@ export function PhotoLightbox({ url, alt, onClose }: PhotoLightboxProps) {
               draggable={false}
               style={{ transform: `scale(${scale})`, transformOrigin: "center center" }}
               className="transition-transform duration-200 select-none"
+              loading="lazy"
             />
           </div>
         </motion.div>

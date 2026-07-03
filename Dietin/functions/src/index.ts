@@ -160,13 +160,47 @@ export const webhooks_paymob = functions.region("us-central1").https.onRequest(a
 
     const crypto = await import("node:crypto");
     const calc = crypto.createHmac("sha512", PAYMOB.HMAC_SECRET).update(dataStr).digest("hex");
-    if (calc !== providedHmac) {
+    // Timing-safe compare — string `!==` on a hex digest is a classic side-channel.
+    const providedBuf = Buffer.from(providedHmac, "utf8");
+    const calcBuf = Buffer.from(calc, "utf8");
+    if (
+      providedBuf.length !== calcBuf.length ||
+      !crypto.timingSafeEqual(providedBuf, calcBuf)
+    ) {
+      console.warn("[paymob] hmac mismatch", {
+        first8: providedHmac.slice(0, 8),
+        order_id: obj?.order?.id,
+      });
       res.status(403).send("Invalid HMAC");
       return;
     }
 
     const success = Boolean(obj?.success);
     const orderId = obj?.order?.id;
+    const transactionId = obj?.id;
+    const amountCents = Number(obj?.amount_cents ?? 0);
+
+    // Idempotency — dedupe on Paymob transaction id. If we've seen this
+    // event before, no-op. Guards against Paymob retrying the webhook and
+    // us granting Pro / extending expiry twice for one payment.
+    if (transactionId) {
+      const eventRef = db.collection("paymob_events").doc(String(transactionId));
+      const alreadyProcessed = await db.runTransaction(async (t) => {
+        const snap = await t.get(eventRef);
+        if (snap.exists) return true;
+        t.set(eventRef, {
+          orderId,
+          amountCents,
+          success,
+          receivedAt: admin.firestore.FieldValue.serverTimestamp(),
+        });
+        return false;
+      });
+      if (alreadyProcessed) {
+        res.status(200).send("Duplicate — already processed");
+        return;
+      }
+    }
 
     // Find pending subscription by providerOrderId
     const snap = await db.collection("subscriptions").where("providerOrderId", "==", orderId).limit(1).get();
@@ -180,6 +214,15 @@ export const webhooks_paymob = functions.region("us-central1").https.onRequest(a
     if (!success) {
       await docRef.update({ status: "failed", updatedAt: admin.firestore.FieldValue.serverTimestamp() });
       res.status(200).send("Marked failed");
+      return;
+    }
+
+    // Amount check — reject if the charged amount does not match the plan.
+    const expectedCents = sub.plan === "annual" ? 4999_00 : 499_00;
+    if (amountCents !== expectedCents) {
+      console.warn("[paymob] amount mismatch", { orderId, expected: expectedCents, got: amountCents, plan: sub.plan });
+      await docRef.update({ status: "failed", failureReason: "amount_mismatch", updatedAt: admin.firestore.FieldValue.serverTimestamp() });
+      res.status(400).send("Amount mismatch");
       return;
     }
 
@@ -205,6 +248,96 @@ export const webhooks_paymob = functions.region("us-central1").https.onRequest(a
     res.status(500).send("Server error");
   }
 });
+
+// --------------------------------------------------------------------------- //
+// Account deletion — GDPR-style "delete my account" flow.
+// Callable so it uses the Firebase JWT the client already holds.
+// Deletes:
+//   1. Storage prefixes users/{uid}/, mealImages/{uid}/, progressPhotos/{uid}/,
+//      profilePictures/{uid}/
+//   2. Firestore users/{uid} and all subcollections (recursive delete)
+//   3. Firestore subscription rows owned by the user
+//   4. The Firebase Auth user (revokes all sessions)
+// Returns { deleted: true } on success. Any partial failure is logged; the
+// caller receives the first hard error so the UI can surface it.
+// --------------------------------------------------------------------------- //
+async function _deleteStoragePrefix(prefix: string): Promise<void> {
+  try {
+    const bucket = admin.storage().bucket();
+    await bucket.deleteFiles({ prefix, force: true });
+  } catch (err) {
+    console.warn(`[delete_my_account] storage prefix ${prefix} failed:`, err);
+  }
+}
+
+async function _deleteUserSubcollections(uid: string): Promise<void> {
+  const userRef = db.collection("users").doc(uid);
+  const subcolls = await userRef.listCollections();
+  for (const subcoll of subcolls) {
+    // Batched delete — Firestore allows 500 writes per batch.
+    // eslint-disable-next-line no-constant-condition
+    while (true) {
+      const snap = await subcoll.limit(400).get();
+      if (snap.empty) break;
+      const batch = db.batch();
+      snap.docs.forEach((d) => batch.delete(d.ref));
+      await batch.commit();
+    }
+  }
+}
+
+async function _deleteSubscriptionsFor(uid: string): Promise<void> {
+  const snap = await db.collection("subscriptions").where("uid", "==", uid).get();
+  if (snap.empty) return;
+  const batch = db.batch();
+  snap.docs.forEach((d) => batch.delete(d.ref));
+  await batch.commit();
+}
+
+export const delete_my_account = functions
+  .region("us-central1")
+  .runWith({ timeoutSeconds: 300, memory: "512MB" })
+  .https.onCall(async (_data, context) => {
+    if (!context.auth) {
+      throw new functions.https.HttpsError("unauthenticated", "Login required");
+    }
+    const uid = context.auth.uid;
+
+    // Storage first — even on partial failure the user's PII shrinks.
+    await Promise.all([
+      _deleteStoragePrefix(`users/${uid}/`),
+      _deleteStoragePrefix(`mealImages/${uid}/`),
+      _deleteStoragePrefix(`progressPhotos/${uid}/`),
+      _deleteStoragePrefix(`profilePictures/${uid}/`),
+    ]);
+
+    // Firestore subcollections then the user doc.
+    try {
+      await _deleteUserSubcollections(uid);
+      await db.collection("users").doc(uid).delete();
+    } catch (err) {
+      console.error("[delete_my_account] firestore delete failed:", err);
+      throw new functions.https.HttpsError("internal", "Firestore delete failed");
+    }
+
+    // Subscription rows.
+    try {
+      await _deleteSubscriptionsFor(uid);
+    } catch (err) {
+      console.warn("[delete_my_account] subscription cleanup failed:", err);
+    }
+
+    // Finally the Auth user — revokes all sessions.
+    try {
+      await admin.auth().deleteUser(uid);
+    } catch (err) {
+      console.error("[delete_my_account] auth delete failed:", err);
+      throw new functions.https.HttpsError("internal", "Auth delete failed");
+    }
+
+    console.log(`[delete_my_account] uid=${uid.slice(0, 6)}… fully deleted`);
+    return { deleted: true };
+  });
 
 // Entitlement: server-evaluated
 export const get_entitlement = functions.region("us-central1").https.onCall(async (data, context) => {

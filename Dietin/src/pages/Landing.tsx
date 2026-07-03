@@ -4,6 +4,7 @@ import { useState, useEffect } from "react";
 import { useTranslation } from 'react-i18next';
 import { LanguageSwitcher } from '@/components/LanguageSwitcher';
 import TopStatusBackground from '@/components/TopStatusBackground';
+import Loader from "@/components/Loader";
 import MealPlanningVector from '@/assets/Vectors/20250811_2231_Healthy Eating Scene_remix_01k2d9rky1ffk88pv408hsdmap.png';
 import WorkoutTrackingVector from '@/assets/Vectors/20250811_2235_Man Exercising Cartoon_remix_01k2d9yqnpesnvbdm0166qgm9j.png';
 import AIAnalysisVector from '@/assets/Vectors/20250811_2238_Man With Checklist_remix_01k2da4t19f4pt57p5911pfnba.png';
@@ -249,7 +250,7 @@ export const Landing = () => {
         // Lightweight splash while assets preload on first visit
         <div className="flex-1 flex items-center justify-center relative z-20 px-6">
           <div className="text-center">
-            <div className="w-10 h-10 rounded-full border-2 border-gray-300 border-t-black animate-spin mx-auto mb-3" />
+            <Loader size={40} className="mx-auto mb-3" />
             <p className="text-gray-600 text-sm">{t('common.loading') ?? 'Loading...'}</p>
           </div>
         </div>

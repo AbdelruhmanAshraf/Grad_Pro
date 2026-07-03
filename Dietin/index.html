@@ -2,7 +2,9 @@
 <html lang="en">
   <head>
     <meta charset="UTF-8" />
-    <link rel="icon" type="image/png" href="./11.png" style="border-radius: 24px;" />
+    <meta http-equiv="X-Content-Type-Options" content="nosniff" />
+    <meta name="referrer" content="strict-origin-when-cross-origin" />
+    <link rel="icon" type="image/png" href="/11.png" style="border-radius: 24px;" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
     <title>Dietin</title>
     <!-- Theme color: white in light mode, black in dark mode -->
@@ -16,9 +18,9 @@
     <!-- Use default so the page background shows (we add a top safe-area shim with our color) -->
     <meta name="apple-mobile-web-app-status-bar-style" content="default" />
     <meta name="apple-mobile-web-app-title" content="Dietin" />
-    <link rel="apple-touch-icon" sizes="180x180" href="./11.png" />
+    <link rel="apple-touch-icon" sizes="180x180" href="/11.png" />
     <!-- Preload splash logo so it downloads during splash -->
-    <link rel="preload" as="image" href="./11.png" />
+    <link rel="preload" as="image" href="/11.png" />
     <style>
       /* Lightweight splash overlay */
       #splash {
@@ -131,7 +133,17 @@
   <body>
     <!-- Top safe-area shim to color the iOS status bar area -->
     <div id="statusbar-shim" style="position: fixed; top: 0; left: 0; right: 0; height: env(safe-area-inset-top); background-color: #ffffff; z-index: 2147483647; pointer-events: none;"></div>
-    <div id="splash" aria-hidden="true"><img src="./11.png" alt="Dietin" /></div>
+    <div id="splash" aria-hidden="true">
+      <img id="splash-logo" alt="Dietin" />
+    </div>
+    <script>
+      (function() {
+        const logo = document.getElementById('splash-logo');
+        if (logo) {
+          logo.src = window.location.origin + '/11.png';
+        }
+      })();
+    </script>
     <div id="root">
       <h1 style="position: absolute; width: 1px; height: 1px; padding: 0; margin: -1px; overflow: hidden; clip: rect(0, 0, 0, 0); white-space: nowrap; border: 0;">
         Dietin - Your AI-Powered Health & Nutrition Assistant. Track meals, get personalized workouts, and achieve your wellness goals with advanced AI analysis.

@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'react';
-import { Loader2, CheckCircle2, XCircle } from 'lucide-react';
+import { CheckCircle2, XCircle } from 'lucide-react';
+import Loader from "@/components/Loader";
 import { useTranslation } from 'react-i18next';
 import { toast } from '@/components/ui/use-toast';
 import { getFunctions, httpsCallable } from 'firebase/functions';
@@ -52,7 +53,7 @@ export default function PaymentReturn() {
       <div className="w-full max-w-md bg-white rounded-2xl shadow p-6 text-center">
         {status === 'checking' && (
           <div className="flex flex-col items-center gap-3">
-            <Loader2 className="h-8 w-8 animate-spin text-indigo-600" />
+            <Loader size={32} className="text-indigo-600" />
             <p className="text-gray-700 font-medium">{t('payment.verifying', { defaultValue: 'Verifying your payment…' })}</p>
             <p className="text-xs text-gray-500">{t('payment.verifyingHint', { defaultValue: 'This may take a few seconds.' })}</p>
           </div>

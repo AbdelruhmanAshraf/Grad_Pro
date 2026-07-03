@@ -27,6 +27,8 @@ export interface UserProfile {
   allergies?: string[];
   budget?: Budget;
   onboardingCompleted?: boolean;
+  healthDisclaimerAccepted?: boolean;
+  healthDisclaimerAcceptedAt?: any;
   createdAt?: string;
   calorieGoal?: number;
   proteinGoal?: number;

@@ -5,6 +5,7 @@ import { useUserStore } from "@/stores/userStore";
 import { routes } from "@/lib/routes";
 import { useState, useEffect, useRef } from "react";
 import MealAnalysis from "./MealAnalysis";
+import PlusButton from "./PlusButton";
 import NavHide from "./NavHide";
 import { useTranslation } from 'react-i18next';
 
@@ -23,14 +24,15 @@ interface NavItemType {
 export function BottomNav({ className, activePath, ...props }: BottomNavProps) {
   const { t } = useTranslation();
   const location = useLocation();
-  const [lastTrackerPath, setLastTrackerPath] = useState("/progress");
+  const [lastTrackerPath, setLastTrackerPath] = useState("/diet");
+  const [isPlusOpen, setIsPlusOpen] = useState(false);
   const navigate = useNavigate();
   const { user } = useUserStore();
   const [isMealAnalysisOpen, setIsMealAnalysisOpen] = useState(false);
   const navRef = useRef<HTMLDivElement | null>(null);
 
   useEffect(() => {
-    if (["/progress", "/burn", "/hydration"].includes(location.pathname)) {
+    if (["/diet", "/burn", "/hydration"].includes(location.pathname)) {
       setLastTrackerPath(location.pathname);
       localStorage.setItem("lastTrackerPath", location.pathname);
     }
@@ -38,8 +40,10 @@ export function BottomNav({ className, activePath, ...props }: BottomNavProps) {
 
   useEffect(() => {
     const savedTrackerPath = localStorage.getItem("lastTrackerPath");
-    if (savedTrackerPath) {
+    if (savedTrackerPath && ["/diet", "/burn", "/hydration"].includes(savedTrackerPath)) {
       setLastTrackerPath(savedTrackerPath);
+    } else {
+      setLastTrackerPath("/diet");
     }
   }, []);
 
@@ -82,9 +86,10 @@ export function BottomNav({ className, activePath, ...props }: BottomNavProps) {
     { name: "home", icon: Home, path: "/home" },
     { name: "workouts", icon: Dumbbell, path: "/plan" },
     { 
-      name: "diet", 
-      icon: Apple, 
-      path: "/diet"
+      name: "add", 
+      icon: Plus, 
+      path: "#",
+      onClick: () => setIsPlusOpen(true)
     },
     { name: "tracker", icon: LineChart, path: lastTrackerPath },
     { 
@@ -129,7 +134,13 @@ export function BottomNav({ className, activePath, ...props }: BottomNavProps) {
         </div>
       </nav>
 
-      <NavHide isAIOpen={isMealAnalysisOpen} />
+      <NavHide isAIOpen={isMealAnalysisOpen || isPlusOpen} />
+
+      <PlusButton 
+        isOpen={isPlusOpen} 
+        onClose={() => setIsPlusOpen(false)}
+        onOpenMealAnalysis={() => setIsMealAnalysisOpen(true)}
+      />
 
       <MealAnalysis 
         isOpen={isMealAnalysisOpen} 
@@ -173,14 +184,14 @@ const NavItem = ({
   const navigate = useNavigate();
 
   const isActive = name === "tracker" 
-    ? ["/progress", "/burn", "/hydration"].includes(currentPath)
+    ? ["/diet", "/burn", "/hydration"].includes(currentPath)
     : name === "workouts"
-      ? ["/plan", "/workouts"].includes(currentPath)
+      ? ["/plan", "/workouts", "/progress"].includes(currentPath)
       : name === "home"
         ? (currentPath === "/" || currentPath === "/home")
         : currentPath === path;
 
-  const isAddButton = false; // Add button styling removed
+  const isAddButton = name === "add";
 
   if (onClick) {
     return (

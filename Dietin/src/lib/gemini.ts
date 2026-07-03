@@ -1,32 +1,184 @@
-import { GoogleGenerativeAI } from "@google/generative-ai";
-import { UserProfile, Goal } from './types';
-import { computeProfileAnalysis } from './calculations';
-import { useUserStore } from "@/stores/userStore";
-import { auth, db } from "@/lib/firebase";
-import { doc, getDoc } from "firebase/firestore";
+// -----------------------------------------------------------------------------
+// Kimi 2.5 LLM adapter (JWT-gated FastAPI proxy)
+// -----------------------------------------------------------------------------
+// The DigitalOcean `dop_v1_…` key must never live in the browser bundle. This
+// module used to hold it via `VITE_DO_AGENT_KEY` and call `inference.do-ai.run`
+// directly with `dangerouslyAllowBrowser: true`. That has been replaced by a
+// server-side proxy in the FastAPI backend (see
+// `Dietin/ai/exercise_recognition/inference/app/llm.py`).
+//
+// The exported surface (`genAI`, `analyzeNutrition`, `analyzeImage`,
+// `analyzeFood`, `analyzeWorkout`, `analyzeUserProfile`, `generateJSON`,
+// `generateText`, `GenInput`) is preserved so the ~10 call sites keep
+// compiling — the internals now do:
+//
+//   fetch(`${VITE_AI_BACKEND_URL}/api/llm/chat`,
+//         { headers: { Authorization: `Bearer ${idToken}` },
+//           body: JSON.stringify({ prompt, mode, task, image_base64, image_mime }),
+//           signal: AbortController(timeout=30s) })
+//   → zod-parse response (belt-and-braces on top of server Pydantic bounds).
+// -----------------------------------------------------------------------------
 
-const getGeminiClient = () => {
-  const apiKey = import.meta.env.VITE_GEMINI_API_KEY;
-  if (!apiKey) {
-    throw new Error('VITE_GEMINI_API_KEY is missing in .env');
+import type { UserProfile } from './types';
+import { computeProfileAnalysis } from './calculations';
+import { useUserStore } from '@/stores/userStore';
+import { auth, db } from '@/lib/firebase';
+import { doc, getDoc } from 'firebase/firestore';
+import {
+  nutritionResponseSchema,
+  imageDescriptionResponseSchema,
+  foodValidationResponseSchema,
+  type NutritionResponse,
+} from '@/lib/validation/schemas';
+import { logSecurityEvent } from '@/lib/securityLog';
+
+const LLM_TIMEOUT_MS = 30_000;
+const BACKEND_URL = (import.meta.env.VITE_AI_BACKEND_URL || '').replace(/\/$/, '');
+
+export class RateLimitError extends Error {
+  constructor(message = 'Too many requests') {
+    super(message);
+    this.name = 'RateLimitError';
   }
-  return new GoogleGenerativeAI(apiKey);
-};
+}
+
+type LLMTask =
+  | 'nutrition'
+  | 'food_validation'
+  | 'image_food_validation'
+  | 'image_description'
+  | 'meal_suggestion'
+  | 'hydration_tip'
+  | 'name_validation'
+  | 'weekly_report'
+  | 'generic';
+
+interface ChatBody {
+  prompt: string;
+  system?: string;
+  mode: 'json' | 'text';
+  task: LLMTask;
+  image_base64?: string;
+  image_mime?: 'image/jpeg' | 'image/png' | 'image/webp';
+}
+
+interface ChatEnvelope {
+  mode: 'json' | 'text';
+  text?: string | null;
+  json?: unknown;
+}
+
+async function idToken(): Promise<string> {
+  const u = auth.currentUser;
+  if (!u) throw new Error('Not signed in');
+  return u.getIdToken(false);
+}
+
+async function chat(body: ChatBody): Promise<ChatEnvelope> {
+  if (!BACKEND_URL) {
+    throw new Error('AI backend URL not configured (VITE_AI_BACKEND_URL).');
+  }
+  const controller = new AbortController();
+  const timeoutId = setTimeout(() => controller.abort(), LLM_TIMEOUT_MS);
+  try {
+    const token = await idToken();
+    const res = await fetch(`${BACKEND_URL}/api/llm/chat`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        Authorization: `Bearer ${token}`,
+      },
+      body: JSON.stringify(body),
+      signal: controller.signal,
+    });
+    if (res.status === 429) {
+      void logSecurityEvent('rate_limit_hit', `llm/${body.task}`);
+      throw new RateLimitError();
+    }
+    if (!res.ok) {
+      void logSecurityEvent('ai_failure', `llm/${body.task} status=${res.status}`);
+      throw new Error(`LLM proxy returned ${res.status}`);
+    }
+    return (await res.json()) as ChatEnvelope;
+  } finally {
+    clearTimeout(timeoutId);
+  }
+}
+
+async function fileToBase64Stripped(file: File): Promise<string> {
+  const buf = await new Promise<string>((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onload = () => resolve(reader.result as string);
+    reader.onerror = reject;
+    reader.readAsDataURL(file);
+  });
+  const idx = buf.indexOf(',');
+  return idx >= 0 ? buf.slice(idx + 1) : buf;
+}
+
+function pickImageMime(file: File): 'image/jpeg' | 'image/png' | 'image/webp' {
+  if (file.type === 'image/png') return 'image/png';
+  if (file.type === 'image/webp') return 'image/webp';
+  return 'image/jpeg';
+}
+
+// -----------------------------------------------------------------------------
+// Backwards-compatible `genAI` shim — MealAnalysis.tsx uses this shape.
+// -----------------------------------------------------------------------------
+type GenAIInput =
+  | string
+  | {
+      contents?: Array<{
+        role?: string;
+        parts?: Array<
+          | { text: string }
+          | { inlineData: { data: string; mimeType: string } }
+        >;
+      }>;
+    };
 
 export const genAI = {
-  getGenerativeModel: ({ model }: { model: string }) => {
-    return getGeminiClient().getGenerativeModel({ model });
-  }
+  getGenerativeModel: ({ model: _model }: { model: string }) => ({
+    generateContent: async (input: GenAIInput) => {
+      let prompt = '';
+      let base64: string | undefined;
+      let mime: 'image/jpeg' | 'image/png' | 'image/webp' | undefined;
+
+      if (typeof input === 'string') {
+        prompt = input;
+      } else {
+        const content = input.contents?.[0];
+        const parts = content?.parts ?? [];
+        for (const part of parts) {
+          if ('text' in part) prompt = part.text;
+          if ('inlineData' in part) {
+            base64 = part.inlineData.data;
+            const m = part.inlineData.mimeType;
+            mime = m === 'image/png' || m === 'image/webp' ? m : 'image/jpeg';
+          }
+        }
+      }
+
+      const env = await chat({
+        prompt,
+        mode: 'text',
+        task: 'generic',
+        image_base64: base64,
+        image_mime: mime,
+      });
+      const responseText = env.text ?? '';
+      return {
+        response: {
+          text: () => responseText,
+        },
+      };
+    },
+  }),
 };
 
-interface NutritionAnalysis {
-  calories: number;
-  protein: number;
-  carbs: number;
-  fat: number;
-  healthScore: number;
-  warning?: string;
-}
+// -----------------------------------------------------------------------------
+// Domain functions used across the app
+// -----------------------------------------------------------------------------
 
 interface AnalysisResult {
   goal: string;
@@ -38,193 +190,95 @@ interface AnalysisResult {
   estimatedWeeks: number;
 }
 
-// Cache for nutrition results
-const nutritionCache = new Map<string, NutritionAnalysis>();
-
-// Fallback calculation if AI fails
-function calculateBasicTDEE(profile: Partial<UserProfile>) {
-  const weight = profile.weight || 70;
-  const height = profile.height || 170;
-  const age = profile.age || 25;
-
-  // Basic BMR calculation
-  const bmr = profile.gender === 'MALE'
-    ? (10 * weight) + (6.25 * height) - (5 * age) + 5
-    : (10 * weight) + (6.25 * height) - (5 * age) - 161;
-
-  // Activity multiplier
-  const activityMultipliers = {
-    LIGHTLY_ACTIVE: 1.375,
-    MODERATELY_ACTIVE: 1.55,
-    VERY_ACTIVE: 1.725,
-    EXTRA_ACTIVE: 1.9,
-  };
-
-  const multiplier = activityMultipliers[profile.activityLevel || 'MODERATELY_ACTIVE'];
-
-  return Math.round(bmr * multiplier);
-}
-
 async function checkProStatus(): Promise<boolean> {
   if (!auth.currentUser) return false;
-
   try {
-    const userDoc = await getDoc(doc(db, "users", auth.currentUser.uid));
-    if (userDoc.exists()) {
-      const userData = userDoc.data();
-      return userData.isPro || false;
-    }
+    const userDoc = await getDoc(doc(db, 'users', auth.currentUser.uid));
+    if (userDoc.exists()) return !!userDoc.data().isPro;
     return false;
-  } catch (error) {
-    console.error('Error checking pro status:', error);
+  } catch {
     return false;
   }
 }
 
-export async function analyzeNutrition(foodDescription: string): Promise<NutritionAnalysis> {
-  const { dailyMealAnalysis, incrementMealAnalysis } = useUserStore.getState();
+const EMPTY_NUTRITION: NutritionResponse = {
+  calories: 0,
+  protein: 0,
+  carbs: 0,
+  fat: 0,
+  healthScore: 0,
+};
 
-  // Get real-time pro status from Firestore
+export async function analyzeNutrition(
+  foodDescription: string,
+): Promise<NutritionResponse> {
+  const { dailyMealAnalysis, incrementMealAnalysis } = useUserStore.getState();
   const isPro = await checkProStatus();
 
-  console.log('Checking meal analysis quota:', {
-    isPro,
-    dailyMealAnalysis,
-    limit: 3
-  });
-
-  // Check if user is not pro and has reached quota
   if (!isPro && dailyMealAnalysis >= 3) {
-    const event = new CustomEvent('showErrorToast', {
-      detail: { message: 'Daily meal analysis limit reached (3/3). Please subscribe to DietinPro for unlimited analysis or wait 24 hours.' }
-    });
-    window.dispatchEvent(event);
+    window.dispatchEvent(
+      new CustomEvent('showErrorToast', {
+        detail: {
+          message:
+            'Daily meal analysis limit reached (3/3). Please subscribe to DietinPro for unlimited analysis or wait 24 hours.',
+        },
+      }),
+    );
     throw new Error('Quota reached');
   }
+  if (!isPro) incrementMealAnalysis();
 
-  // Increment quota counter BEFORE starting analysis for non-pro users
-  if (!isPro) {
-    console.log('Incrementing meal analysis quota for free user');
-    incrementMealAnalysis();
+  // Step 1 — food validation
+  try {
+    const validationEnv = await chat({
+      prompt: foodDescription,
+      mode: 'json',
+      task: 'food_validation',
+    });
+    const validation = foodValidationResponseSchema.safeParse(validationEnv.json);
+    if (validation.success && !validation.data.isFood) {
+      const errorMessage = validation.data.reason || 'Please enter a valid halal food item';
+      window.dispatchEvent(
+        new CustomEvent('showErrorToast', {
+          detail: {
+            message: errorMessage.charAt(0).toUpperCase() + errorMessage.slice(1),
+          },
+        }),
+      );
+      return { ...EMPTY_NUTRITION, warning: errorMessage };
+    }
+  } catch (err) {
+    // Validation failure is non-fatal — fall through to nutrition analysis.
+    if (err instanceof RateLimitError) throw err;
   }
 
+  // Step 2 — nutrition analysis
   try {
-    const model = genAI.getGenerativeModel({ model: "gemini-2.0-flash" });
-
-    // Updated validation prompt to check for haram food and unrealistic amounts
-    const validationPrompt = `Please validate if this user input is a food/drink/human consumable item.'
-Analyze this input: "${foodDescription}"
-
-Rules:
-1. Accept ANY language (English, Franco-Arabic like "ma7shi/ta3miya", Arabic, French, Chinese, etc.)
-2. Ignore ALL spelling mistakes completely
-3. Accept common food nicknames and slang
-4. Accept numeric character substitutions (like 7 for ح, 3 for ع, etc.)
-5. Accept any measurement units (kg, g, lbs, pieces, etc.)
-6. Accept both formal and informal food descriptions
-7. REJECT if portions are unrealistic (e.g. "1000kg rice", "50kg meat", anything over 10kg)
-8. REJECT haram, illegal foods like:
-   - Pork
-   - Alcohol
-   -etc. 
-9. ACCEPT all regular soft drinks and beverages (like Pepsi, Coca-Cola, etc.) as they are halal
-10. REJECT if the description contains non-food items
-11. REJECT if the description is nonsensical or inappropriate
-
-Is this describing consumable food/drink with realistic portions?
-Answer ONLY with "yes" or "no" followed by "|" and the reason if "no".
-Example responses:
-"yes"
-"no|Contains pork"
-"no|Unrealistic portion size"
-"no|Not halal meat"`;
-
-    const validationResult = await model.generateContent(validationPrompt);
-    const validationResponse = await validationResult.response;
-    const validationText = validationResponse.text().toLowerCase();
-
-    const [isValid, reason] = validationText.split('|');
-    const isFood = isValid.includes('yes');
-
-    if (!isFood) {
-      // Show error toast for invalid food
-      const errorMessage = reason || "Please enter a valid halal food item";
-
-      // Create and dispatch a custom event for showing the error toast
-      const event = new CustomEvent('showErrorToast', {
-        detail: { message: errorMessage.charAt(0).toUpperCase() + errorMessage.slice(1) }
-      });
-      window.dispatchEvent(event);
-
-      return {
-        calories: 0,
-        protein: 0,
-        carbs: 0,
-        fat: 0,
-        healthScore: 0,
-        warning: errorMessage
-      };
+    const env = await chat({
+      prompt: foodDescription,
+      mode: 'json',
+      task: 'nutrition',
+    });
+    const parsed = nutritionResponseSchema.safeParse(env.json);
+    if (!parsed.success) {
+      void logSecurityEvent('validation_error', `analyzeNutrition zod: ${parsed.error.message}`);
+      return { ...EMPTY_NUTRITION, warning: 'Failed to analyze food' };
     }
-
-    // If it is food, proceed with nutrition analysis
-    const prompt = `Please analyze the nutrition facts of this food/meal:
-    Calories, Protein, Carbs, Fat, Health Score (Health score based on healthiness of the food preciesly between 0 and 100, eg, 32,52, 56, 78, 90, 100)
-The Meal description is: "${foodDescription}"
-Return ONLY a JSON object in this exact format (no explanation, no other text):
-{
-  "calories": number,
-  "protein": number,
-  "carbs": number,
-  "fat": number,
-  "healthScore": number
-}`;
-
-    const result = await model.generateContent(prompt);
-    const response = await result.response;
-    const text = response.text();
-
-    // Clean the response text
-    const cleanedText = text.replace(/```json\n?|\n?```/g, '').trim();
-
-    try {
-      const parsed = JSON.parse(cleanedText);
-
-      // Validate the parsed data
-      if (!parsed || typeof parsed !== 'object') {
-        throw new Error('Invalid response format');
-      }
-
-      // Convert to numbers with precise decimals
-      const validatedData = {
-        calories: Math.max(0, Number(parsed.calories) || 0),
-        protein: Math.max(0, Number(Number(parsed.protein).toFixed(1)) || 0),
-        carbs: Math.max(0, Number(Number(parsed.carbs).toFixed(1)) || 0),
-        fat: Math.max(0, Number(Number(parsed.fat).toFixed(1)) || 0),
-        healthScore: Math.min(100, Math.max(0, Number(Number(parsed.healthScore).toFixed(1)) || 0))
-      };
-
-      return validatedData;
-    } catch (error) {
-      console.error("Failed to parse nutrition data:", error, "Raw text:", text);
-      return {
-        calories: 0,
-        protein: 0,
-        carbs: 0,
-        fat: 0,
-        healthScore: 0,
-        warning: "Failed to analyze food"
-      };
-    }
-  } catch (error) {
-    console.error("Error analyzing food:", error);
-    throw error;
+    return {
+      calories: Number(parsed.data.calories.toFixed(1)),
+      protein: Number(parsed.data.protein.toFixed(1)),
+      carbs: Number(parsed.data.carbs.toFixed(1)),
+      fat: Number(parsed.data.fat.toFixed(1)),
+      healthScore: Number(parsed.data.healthScore.toFixed(1)),
+      warning: parsed.data.warning,
+    };
+  } catch (err) {
+    if (err instanceof RateLimitError) throw err;
+    return { ...EMPTY_NUTRITION, warning: 'Failed to analyze food' };
   }
 }
 
 export async function analyzeUserProfile(profile: UserProfile): Promise<AnalysisResult> {
-  // Replace AI-based analysis with deterministic, formula-based calculations
-  // using open-source Mifflin-St Jeor for BMR, activity multipliers for TDEE,
-  // goal/weekly target to adjust calories, and macro distribution.
   const result = computeProfileAnalysis(profile);
   return {
     goal: result.goal,
@@ -239,163 +293,119 @@ export async function analyzeUserProfile(profile: UserProfile): Promise<Analysis
 
 export async function analyzeImage(file: File): Promise<{ description: string }> {
   const { dailyImageAnalysis, incrementImageAnalysis } = useUserStore.getState();
-
-  // Get real-time pro status from Firestore
   const isPro = await checkProStatus();
 
-  console.log('Checking image analysis quota:', {
-    isPro,
-    dailyImageAnalysis,
-    limit: 1
-  });
-
-  // Check if user is not pro and has reached quota
   if (!isPro && dailyImageAnalysis >= 1) {
-    const event = new CustomEvent('showErrorToast', {
-      detail: { message: 'Daily image analysis limit reached (1/1). Please subscribe to DietinPro for unlimited analysis or wait 24 hours.' }
-    });
-    window.dispatchEvent(event);
+    window.dispatchEvent(
+      new CustomEvent('showErrorToast', {
+        detail: {
+          message:
+            'Daily image analysis limit reached (1/1). Please subscribe to DietinPro for unlimited analysis or wait 24 hours.',
+        },
+      }),
+    );
     throw new Error('Quota reached');
   }
+  if (!isPro) incrementImageAnalysis();
 
-  // Increment quota counter BEFORE starting analysis for non-pro users
-  if (!isPro) {
-    console.log('Incrementing image analysis quota for free user');
-    incrementImageAnalysis();
+  if (file.size > 5 * 1024 * 1024) {
+    throw new Error('Image too large (5 MB max)');
+  }
+  const allowed = ['image/jpeg', 'image/png', 'image/webp'];
+  if (file.type && !allowed.includes(file.type)) {
+    throw new Error('Unsupported image type. Use JPEG, PNG, or WebP.');
   }
 
+  const base64 = await fileToBase64Stripped(file);
+  const mime = pickImageMime(file);
+
+  // Step 1 — food validation
   try {
-    const model = genAI.getGenerativeModel({ model: "gemini-2.0-flash" });
-
-    // Convert File to base64
-    const base64 = await new Promise<string>((resolve, reject) => {
-      const reader = new FileReader();
-      reader.onload = () => resolve(reader.result as string);
-      reader.onerror = reject;
-      reader.readAsDataURL(file);
+    const validationEnv = await chat({
+      prompt: 'Is this image a food/meal image? Answer with a JSON object.',
+      mode: 'json',
+      task: 'image_food_validation',
+      image_base64: base64,
+      image_mime: mime,
     });
-
-    // First validate if it's a food image
-    const validationPrompt = `Is this an image of food or a meal? Answer only with "yes" or "no".`;
-
-    const validationResult = await model.generateContent({
-      contents: [{
-        role: "user",
-        parts: [
-          { text: validationPrompt },
-          { inlineData: { data: base64.split(',')[1], mimeType: file.type } }
-        ]
-      }]
-    });
-
-    const validationResponse = await validationResult.response;
-    const isFood = validationResponse.text().toLowerCase().includes('yes');
-
-    if (!isFood) {
-      throw new Error("Please upload an image of food.");
+    const validation = foodValidationResponseSchema.safeParse(validationEnv.json);
+    if (validation.success && !validation.data.isFood) {
+      throw new Error('Please upload an image of food.');
     }
+  } catch (err) {
+    if (err instanceof RateLimitError) throw err;
+    if (err instanceof Error && err.message.startsWith('Please upload')) throw err;
+    // else: validation network failure — proceed to description
+  }
 
-    // If it's food, analyze the contents
-    const analysisPrompt = `Describe the food/drink in this image with precise details.ONLY IF IT IS CONSUMABLE ITEM Include:
-1. Each distinct item/component
-BE SUPER FUCKING DETAILED AND SPECIFIC AS POSSIBLE AND DONT INCLUDE USELESS WORDS OR EXPRESSIONS LIKE 'THE PLATE SHOWS' ONLHY THE CONMTENT AS BULLETS
-2. Exact or estimated portion sizes (in oz, grams, or standard measures)
-3. Preparation methods (if visible)
-4. Any visible sauces, seasonings, or toppings
-5. Arrangement on the plate
-6. Don't include any italics, bolds, commas, fullstops, or any other formatting keep it simple and clear in lines include all the details.
-7. DONT INCLUDE ANYTHING ELSE LIKE THE 'THE PLATE CONTINAINS' NO ONLY THE INGREDEIENTS AS BULLETS NO EXTRA WORDS OR PHRASES BRIEF ANSER IN YOUR ANSWER LIEK DONT INCLUDE TITLE LIKE ' OH I GOT IT' THEN THE ANSWER NO ONLY THE ANSWER
-THICH IS AS BULLETS IN LIKE
-YOUR ANSWER IS LIKE TO BE FOR EXMAPLE:
-- 100g of chicken
-- 100g of rice
-- 100g of vegetables
-- 100g of sauce
-- 100g of cheese
-- 100g of bread
-THIS IS AN EXMAPLE AND REFERENCE FOR YOU TO FOLLOW AND NOTHING ELSE
-
-Format as a clear, detailed description focused ONLY on the food content.`;
-
-    const result = await model.generateContent({
-      contents: [{
-        role: "user",
-        parts: [
-          { text: analysisPrompt },
-          { inlineData: { data: base64.split(',')[1], mimeType: file.type } }
-        ]
-      }]
-    });
-
-    const response = await result.response;
-    const description = response.text()
+  // Step 2 — description
+  const env = await chat({
+    prompt: 'describe the food in this image concisely',
+    mode: 'text',
+    task: 'image_description',
+    image_base64: base64,
+    image_mime: mime,
+  });
+  const parsed = imageDescriptionResponseSchema.safeParse({
+    description: (env.text ?? '')
       .trim()
       .replace(/^(The image shows|I see|This is|In this image)/i, '')
-      .trim();
-
-    return { description };
-  } catch (error) {
-    console.error('Image analysis failed:', error);
-    throw error;
+      .trim(),
+  });
+  if (!parsed.success) {
+    void logSecurityEvent('validation_error', `analyzeImage zod: ${parsed.error.message}`);
+    throw new Error('Image analysis failed');
   }
+  return { description: parsed.data.description };
 }
 
-export async function analyzeFood(description: string) {
+export async function analyzeFood(description: string): Promise<{
+  calories: number;
+  protein: number;
+  carbs: number;
+  fat: number;
+  healthScore: number;
+} | null> {
   try {
-    const model = genAI.getGenerativeModel({ model: "gemini-2.0-flash" });
-
-    const prompt = `Analyze this food: "${description}"`;
-    const result = await model.generateContent(prompt);
-    const response = await result.response;
-    const text = response.text();
-
-    try {
-      const parsed = JSON.parse(text);
-      return {
-        calories: parsed.nutrition.calories,
-        protein: parsed.nutrition.protein,
-        carbs: parsed.nutrition.carbs,
-        fat: parsed.nutrition.fat,
-        healthScore: Math.round(parsed.healthScore)
-      };
-    } catch (error) {
-      console.error("Failed to parse nutrition data:", error);
-      return null;
-    }
-  } catch (error) {
-    console.error("Error analyzing food:", error);
+    const env = await chat({
+      prompt: description,
+      mode: 'json',
+      task: 'nutrition',
+    });
+    const parsed = nutritionResponseSchema.safeParse(env.json);
+    if (!parsed.success) return null;
+    return {
+      calories: parsed.data.calories,
+      protein: parsed.data.protein,
+      carbs: parsed.data.carbs,
+      fat: parsed.data.fat,
+      healthScore: Math.round(parsed.data.healthScore),
+    };
+  } catch {
     return null;
   }
 }
 
-export async function analyzeWorkout(workoutDescription: string): Promise<any> {
-  // Safely access store to avoid type issues when properties are absent
-  const store: any = (useUserStore as any)?.getState?.() ?? {};
-  const dailyWorkoutAnalysis: number = typeof store.dailyWorkoutAnalysis === 'number' ? store.dailyWorkoutAnalysis : 0;
-  const incrementWorkoutAnalysis: undefined | (() => void) = typeof store.incrementWorkoutAnalysis === 'function' ? store.incrementWorkoutAnalysis : undefined;
+export async function analyzeWorkout(_workoutDescription: string): Promise<unknown> {
+  const store = (useUserStore as unknown as { getState?: () => Record<string, unknown> }).getState?.() ?? {};
+  const daily = typeof store.dailyWorkoutAnalysis === 'number' ? (store.dailyWorkoutAnalysis as number) : 0;
+  const increment = typeof store.incrementWorkoutAnalysis === 'function'
+    ? (store.incrementWorkoutAnalysis as () => void)
+    : undefined;
 
-  // Check if user is not pro and has reached quota
-  if (dailyWorkoutAnalysis >= 5) {
-    const event = new CustomEvent('showErrorToast', {
-      detail: { message: 'Daily workout analysis limit reached. Please subscribe to DietinPro for unlimited analysis or wait 24 hours.' }
-    });
-    window.dispatchEvent(event);
+  if (daily >= 5) {
+    window.dispatchEvent(
+      new CustomEvent('showErrorToast', {
+        detail: {
+          message:
+            'Daily workout analysis limit reached. Please subscribe to DietinPro for unlimited analysis or wait 24 hours.',
+        },
+      }),
+    );
     throw new Error('Quota reached');
   }
-
-  try {
-    // ... rest of the code ...
-
-    // Increment quota counter on successful analysis
-    if (incrementWorkoutAnalysis) {
-      incrementWorkoutAnalysis();
-    }
-
-    // TODO: implement real workout analysis; returning null placeholder for now
-    return null as any;
-  } catch (error) {
-    // ... rest of the code ...
-  }
+  increment?.();
+  return null;
 }
 
 export interface GenInput {
@@ -405,32 +415,39 @@ export interface GenInput {
   image?: { data: string; mimeType: string };
 }
 
-export async function generateJSON<T = unknown>({ prompt, system, model, image }: GenInput): Promise<T> {
-  const result = await genAI.getGenerativeModel({ model: model || "kimi-k2.5" }).generateContent({
-    contents: [{
-      role: "user",
-      parts: [
-        { text: prompt },
-        ...(image ? [{ inlineData: { data: image.data, mimeType: image.mimeType } }] : [])
-      ]
-    }]
-  });
-  
-  const responseText = await result.response.text();
-  const cleanedText = responseText.replace(/```json\n?|\n?```/g, '').trim();
-  return JSON.parse(cleanedText) as T;
+function coerceMime(m: string): 'image/jpeg' | 'image/png' | 'image/webp' {
+  if (m === 'image/png' || m === 'image/webp') return m;
+  return 'image/jpeg';
 }
 
-export async function generateText({ prompt, system, model, image }: GenInput): Promise<string> {
-  const result = await genAI.getGenerativeModel({ model: model || "kimi-k2.5" }).generateContent({
-    contents: [{
-      role: "user",
-      parts: [
-        { text: prompt },
-        ...(image ? [{ inlineData: { data: image.data, mimeType: image.mimeType } }] : [])
-      ]
-    }]
+export async function generateJSON<T = unknown>({
+  prompt,
+  system,
+  image,
+}: GenInput): Promise<T> {
+  const env = await chat({
+    prompt,
+    system,
+    mode: 'json',
+    task: 'generic',
+    image_base64: image?.data,
+    image_mime: image ? coerceMime(image.mimeType) : undefined,
   });
-  
-  return result.response.text();
+  return env.json as T;
+}
+
+export async function generateText({
+  prompt,
+  system,
+  image,
+}: GenInput): Promise<string> {
+  const env = await chat({
+    prompt,
+    system,
+    mode: 'text',
+    task: 'generic',
+    image_base64: image?.data,
+    image_mime: image ? coerceMime(image.mimeType) : undefined,
+  });
+  return env.text ?? '';
 }

@@ -2,7 +2,8 @@ import React, { useEffect, useMemo, useState } from 'react';
 import { useLocation, useNavigate } from 'react-router-dom';
 import { auth } from '@/lib/firebase';
 import { verifyPasswordResetCode, confirmPasswordReset } from 'firebase/auth';
-import { Loader2, CheckCircle2, Lock, AlertTriangle } from 'lucide-react';
+import { CheckCircle2, Lock, AlertTriangle } from 'lucide-react';
+import Loader from "@/components/Loader";
 import { useTranslation } from 'react-i18next';
 
 function useQuery() {
@@ -77,7 +78,7 @@ export default function ResetPassword() {
         {status === 'verifying' && (
           <div className="flex flex-col items-center gap-4">
             <div className="relative inline-flex items-center justify-center w-16 h-16 rounded-full bg-primary/10 text-primary">
-              <Loader2 className="h-8 w-8 animate-spin" />
+              <Loader size={32} />
             </div>
             <h1 className="text-xl font-semibold">
               {t('reset.title_verifying', 'Validating reset link...')}
@@ -134,7 +135,7 @@ export default function ResetPassword() {
                 className="w-full mt-2 inline-flex items-center justify-center gap-2 rounded-2xl bg-primary text-primary-foreground px-5 py-3 font-medium shadow-sm hover:opacity-95 transition disabled:opacity-60"
               >
                 {submitting ? (
-                  <Loader2 className="h-4 w-4 animate-spin" />
+                  <Loader size={16} />
                 ) : (
                   <Lock className="h-4 w-4" />
                 )}

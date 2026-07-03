@@ -1,12 +1,13 @@
 import { motion, AnimatePresence } from "framer-motion";
 import { createPortal } from "react-dom";
-import { X, Check, Rocket, Star, Zap, Brain, Camera, ChartBar, Lock, Loader2 } from "lucide-react";
+import { X, Check, Rocket, Star, Zap, Brain, Camera, ChartBar, Lock } from "lucide-react";
 import { useEffect, useRef, useState } from "react";
 import { toast } from "@/components/ui/use-toast";
 import { auth, db } from "@/lib/firebase";
 import { doc, updateDoc } from "firebase/firestore";
 import { useUserStore } from "@/stores/userStore";
 import NavHide from './NavHide';
+import Loader from "./Loader";
 import { cn } from "@/lib/utils";
 import { Link } from "react-router-dom";
 import { onAuthStateChanged } from "firebase/auth";
@@ -406,9 +407,9 @@ export const ProSubscriptionPanel = ({ isOpen, onClose }: ProSubscriptionPanelPr
                               isRedeeming && "opacity-50 cursor-not-allowed"
                             )}
                           >
-                            {isRedeeming ? (
-                              <div className="h-4 w-4 border-2 border-white/20 border-t-white rounded-full animate-spin mx-auto" />
-                            ) : (
+                             {isRedeeming ? (
+                               <Loader size={16} className="mx-auto text-white" />
+                             ) : (
                               t('proPanel.redeem.action')
                             )}
                           </button>

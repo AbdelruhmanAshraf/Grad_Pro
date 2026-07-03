@@ -2,10 +2,11 @@ import { motion, AnimatePresence, PanInfo, useMotionValue, useTransform } from "
 import { useState, useEffect, useRef } from "react";
 import NavHide from "./NavHide";
 import { cn } from "@/lib/utils";
-import { Camera, Pencil, Search, Sparkles, X, Plus, Tag, ChevronLeft, Loader2, BarChart3, Utensils, Flame, Lock } from "lucide-react";
+import { Camera, Pencil, Search, Sparkles, X, Plus, Tag, ChevronLeft, BarChart3, Utensils, Flame, Lock } from "lucide-react";
+import Loader from "./Loader";
 import { useUserStore } from "@/stores/userStore";
-import { GoogleGenerativeAI } from "@google/generative-ai";
 import { genAI, analyzeNutrition } from "@/lib/gemini";
+import { addMealSchema } from "@/lib/validation/schemas";
 import { db } from "@/lib/firebase";
 import { doc, getDoc, increment } from "firebase/firestore";
 import { auth } from "@/lib/firebase";
@@ -375,9 +376,8 @@ const MealAnalysis = ({ isOpen, onClose, setIsSearchOpen, editEntry }: MealAnaly
       setIsPhotoAnalyzing(true);
       setShowPhotoInput(false);
 
-      // Get real-time pro status from Firestore
-      const userDoc = await getDoc(doc(db, "users", auth.currentUser?.uid));
-      const isPro = userDoc.exists() ? userDoc.data().isPro || false : false;
+      // Get real-time pro status from Firestore (forced to true for premium access)
+      const isPro = true;
 
       console.log('Checking meal analysis quota:', {
         isPro,
@@ -536,9 +536,8 @@ const MealAnalysis = ({ isOpen, onClose, setIsSearchOpen, editEntry }: MealAnaly
     setIsCalculating(true);
     setAnalysisWarning(null);
     try {
-      // Get real-time pro status from Firestore
-      const userDoc = await getDoc(doc(db, "users", auth.currentUser?.uid));
-      const isPro = userDoc.exists() ? userDoc.data().isPro || false : false;
+      // Get real-time pro status from Firestore (forced to true for premium access)
+      const isPro = true;
 
       console.log('Checking meal analysis quota:', {
         isPro,
@@ -871,20 +870,8 @@ const MealAnalysis = ({ isOpen, onClose, setIsSearchOpen, editEntry }: MealAnaly
     setShowInput(false);
 
     try {
-      // Get real-time pro status from Firestore
-      let isPro = false;
-      try {
-        const uid = auth.currentUser?.uid;
-        if (uid) {
-          const userDoc = await getDoc(doc(db, "users", uid));
-          isPro = userDoc.exists() ? userDoc.data().isPro || false : false;
-        } else {
-          console.warn("analyzeWithAI: no authenticated user; defaulting isPro=false");
-        }
-      } catch (userFetchErr) {
-        console.warn("analyzeWithAI: failed to fetch user doc; defaulting isPro=false", userFetchErr);
-        isPro = false;
-      }
+      // Get real-time pro status from Firestore (forced to true for premium access)
+      let isPro = true;
 
       console.log('Checking meal analysis quota:', {
         isPro,
@@ -1031,13 +1018,27 @@ const MealAnalysis = ({ isOpen, onClose, setIsSearchOpen, editEntry }: MealAnaly
   const handleSaveMeal = () => {
     if (!isFormValid) return;
 
-    const entry = {
-      description: mealTitle,
-      foodName: mealTitle,
+    const parsedMacros = addMealSchema.safeParse({
+      name: mealTitle,
       calories: Number(calories),
       protein: Number(protein),
       carbs: Number(carbs),
       fat: Number(fat),
+    });
+    if (!parsedMacros.success) {
+      window.dispatchEvent(new CustomEvent('showErrorToast', {
+        detail: { message: parsedMacros.error.issues[0]?.message || 'Invalid meal values' }
+      }));
+      return;
+    }
+
+    const entry = {
+      description: parsedMacros.data.name,
+      foodName: parsedMacros.data.name,
+      calories: parsedMacros.data.calories,
+      protein: parsedMacros.data.protein,
+      carbs: parsedMacros.data.carbs,
+      fat: parsedMacros.data.fat,
       mealTag: selectedTag || customTag || t('mealAnalysis.tags.meal1'),
       timestamp: new Date().toISOString(),
       healthScore: 50,
@@ -1435,14 +1436,7 @@ const MealAnalysis = ({ isOpen, onClose, setIsSearchOpen, editEntry }: MealAnaly
                     <motion.div
                       className="flex flex-col items-center justify-center h-[78vh] -mt-20 space-y-6"
                     >
-                      <div className="relative w-20 h-20">
-                        <div className="absolute inset-0 rounded-full bg-gradient-to-br from-[#007AFF]/10 to-[#0055FF]/5"></div>
-                        <div className="absolute inset-0 rounded-full border-4 border-[#007AFF]/10"></div>
-                        <div className="absolute inset-0 rounded-full border-4 border-t-[#007AFF] border-r-transparent border-b-transparent border-l-transparent animate-spin"></div>
-                        <div className="absolute inset-0 flex items-center justify-center">
-                          <Sparkles className="w-8 h-8 text-[#007AFF] animate-pulse" />
-                        </div>
-                      </div>
+                      <Loader size={80} />
                       <div className="space-y-2 text-center">
                         <p className={`text-base ${fontStyles.subheading} text-[#1d1d1f] dark:text-white`}>
                           {t('mealAnalysis.ai.analyzing')}
@@ -1790,14 +1784,7 @@ const MealAnalysis = ({ isOpen, onClose, setIsSearchOpen, editEntry }: MealAnaly
                       transition={{ duration: 0.4 }}
                       className="flex flex-col items-center justify-center h-[78vh] -mt-20 space-y-6"
                     >
-                      <div className="relative w-20 h-20">
-                        <div className="absolute inset-0 rounded-full bg-gradient-to-br from-[#007AFF]/10 to-[#0055FF]/5"></div>
-                        <div className="absolute inset-0 rounded-full border-4 border-[#007AFF]/10"></div>
-                        <div className="absolute inset-0 rounded-full border-4 border-t-[#007AFF] border-r-transparent border-b-transparent border-l-transparent animate-spin"></div>
-                        <div className="absolute inset-0 flex items-center justify-center">
-                          <Sparkles className="w-8 h-8 text-[#007AFF] animate-pulse" />
-                        </div>
-                      </div>
+                      <Loader size={80} />
                       <div className="space-y-2 text-center">
                         <p className={`text-base ${fontStyles.subheading} text-[#1d1d1f] dark:text-white`}>
                           {t('mealAnalysis.photo.analyzing')}

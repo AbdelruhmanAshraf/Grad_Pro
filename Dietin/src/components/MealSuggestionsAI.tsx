@@ -4,6 +4,7 @@ import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { useTranslation } from 'react-i18next';
+import Loader from "./Loader";
 
 import {
   AlertTriangle,
@@ -458,6 +459,42 @@ const IngredientCard: React.FC<{ ingredient: IngredientDetail }> = ({ ingredient
   );
 };
 
+// Hardcoded example meals shown for non‑pro users
+const getExampleMeals = (
+  t: (key: string, fallback?: string) => string,
+  mealType: 'Breakfast' | 'Lunch' | 'Dinner' | 'Snack'
+): MealSuggestionType[] => {
+  const min = t('units.min', 'min');
+  return [
+    {
+      name: t('mealAI.examples.example1.name', 'Grilled Chicken Salad'),
+      type: mealType,
+      calories: 320,
+      protein: 35,
+      carbs: 18,
+      fat: 12,
+      difficulty: 'Easy',
+      timeToMake: `15 ${min}`,
+      budget: '€€',
+      quickRecipe: t('mealAI.examples.example1.quickRecipe', 'Grill chicken, toss with greens and dressing.'),
+      cuisine: t('mealAI.examples.example1.cuisine', 'Home cooking')
+    },
+    {
+      name: t('mealAI.examples.example2.name', 'Oatmeal with Berries'),
+      type: mealType,
+      calories: 280,
+      protein: 12,
+      carbs: 52,
+      fat: 5,
+      difficulty: 'Easy',
+      timeToMake: `10 ${min}`,
+      budget: '€',
+      quickRecipe: t('mealAI.examples.example2.quickRecipe', 'Cook oats and top with fresh berries.'),
+      cuisine: t('mealAI.examples.example2.cuisine', 'Home cooking')
+    }
+  ];
+};
+
 const MealSuggestionsAI: React.FC<MealSuggestionsAIProps> = ({
   remainingCalories,
   remainingProtein,
@@ -470,6 +507,7 @@ const MealSuggestionsAI: React.FC<MealSuggestionsAIProps> = ({
   const { user } = useUserStore();
   const { t, i18n } = useTranslation();
   const [loading, setLoading] = useState(false);
+  const [hasError, setHasError] = useState(false);
   const [isBlurred, setIsBlurred] = useState(false);
   const [isExpanded, setIsExpanded] = useState(false);
   const [selectedMeal, setSelectedMeal] = useState<MealSuggestionType | null>(null);
@@ -590,6 +628,7 @@ const MealSuggestionsAI: React.FC<MealSuggestionsAIProps> = ({
   }, []);
 
   const shouldRefreshMeals = useCallback(() => {
+    if (suggestions.length === 0) return true;
     if (!lastUpdated) return true;
 
     const now = new Date();
@@ -605,13 +644,18 @@ const MealSuggestionsAI: React.FC<MealSuggestionsAIProps> = ({
     if (currentMealType !== lastMealType) return true;
 
     return false;
-  }, [lastUpdated, lastMealType, getMealType]);
+  }, [suggestions.length, lastUpdated, lastMealType, getMealType]);
 
   const generateMealSuggestions = async (retryCount = 0) => {
     setLoading(true);
     try {
-      // For non-pro users, don't generate AI suggestions - they'll see static examples via ProFeatures component
+      // For non-pro users, show hardcoded example meals instead of calling the AI
       if (!user?.isPro) {
+        const currentMealType = getMealType(new Date().getHours());
+        const examples = getExampleMeals(t, currentMealType);
+        setLastMealType(currentMealType);
+        setSuggestions(examples);
+        setHasError(false);
         setLoading(false);
         return;
       }
@@ -737,118 +781,55 @@ Return EXACTLY 3 items in this JSON format (no extra text):
           prompt, 
           model: import.meta.env.VITE_GEMINI_MODEL_LITE || 'gemini-2.0-flash-lite' 
         });
-      } catch {
+      } catch (err) {
         throw new Error('Invalid JSON format received');
       }
 
+      // Validate and sanitize the response structure
+      if (!Array.isArray(newSuggestions)) {
+        throw new Error('Invalid response format');
+      }
+
+      const validatedSuggestions: MealSuggestionType[] = newSuggestions.map(meal => {
+        return {
+          name: meal.name || 'Delicious Meal',
+          type: meal.type || currentMealType,
+          calories: Math.max(0, Number(meal.calories) || 100),
+          protein: Math.max(0, Number(meal.protein) || 10),
+          carbs: Math.max(0, Number(meal.carbs) || 10),
+          fat: Math.max(0, Number(meal.fat) || 5),
+          difficulty: meal.difficulty || 'Easy',
+          timeToMake: meal.timeToMake || '15 minutes',
+          budget: meal.budget || '€',
+          quickRecipe: meal.quickRecipe || 'Prepare and enjoy.',
+          cuisine: meal.cuisine || 'Home cooking'
+        };
+      }).slice(0, 3);
+
+      setLastMealType(currentMealType);
+      setSuggestions(validatedSuggestions);
+      setHasError(false);
+      setSuggestions(validatedSuggestions);
+      
+      // Persist names to history to reduce repetition across sessions
       try {
-
-        // Validate the response structure
-        if (!Array.isArray(newSuggestions) || newSuggestions.length !== 3) {
-          throw new Error('Invalid response format');
-        }
-
-        // Validate each meal object has required properties
-        newSuggestions.forEach((meal, index) => {
-          const requiredStringProps = ['name', 'type', 'difficulty', 'timeToMake', 'budget', 'quickRecipe', 'cuisine'];
-          const requiredNumericProps = ['calories', 'protein', 'carbs', 'fat'];
-
-          // Check string properties (must be truthy)
-          for (const prop of requiredStringProps) {
-            if (!meal[prop as keyof MealSuggestionType]) {
-              throw new Error(`Missing required property '${prop}' in meal ${index + 1}`);
-            }
-          }
-
-          // Check numeric properties (must be defined and >= 0)
-          for (const prop of requiredNumericProps) {
-            const value = meal[prop as keyof MealSuggestionType];
-            if (typeof value !== 'number' || value < 0) {
-              throw new Error(`Invalid or missing numeric property '${prop}' in meal ${index + 1}`);
-            }
-          }
-        });
-
-        // Enforce home budget only (reject luxury "€€€")
-        const hasLuxury = newSuggestions.some(m => (m.budget || '').trim() === '€€€');
-        if (hasLuxury) {
-          throw new Error('AI returned luxury-budget meals. Retrying with stricter constraints...');
-        }
-
-        // Since we're using "Home cooking" as cuisine, no cuisine validation needed
-
-        // Reject gourmet/premium keywords in meal name or quick recipe
-        const forbiddenMealKeywords = ['wagyu', 'truffle', 'caviar', 'foie gras', 'gold', 'gold leaf', 'molecular', 'kobe', 'duck', 'بط'];
-        const hasGourmet = newSuggestions.some(m =>
-          forbiddenMealKeywords.some(term => (`${m.name || ''} ${m.quickRecipe || ''}`).toLowerCase().includes(term))
-        );
-        if (hasGourmet) {
-          throw new Error('AI returned gourmet/premium items. Retrying...');
-        }
-
-        // Enforce Arabic script for values when Arabic UI is active
-        if (isArabic) {
-          const latinRegex = /[A-Za-z]/;
-          const hasLatin = newSuggestions.some(m =>
-            latinRegex.test(m.name || '') || latinRegex.test(m.quickRecipe || '')
-          );
-          if (hasLatin) {
-            throw new Error('AI returned non-Arabic visible text while Arabic is active. Retrying...');
-          }
-        }
-
-        // Enforce simple food-style names with quantities and '+' separators, max 30 chars
-        const nameInvalid = newSuggestions.some(m => {
-          const n = (m.name || '').trim();
-          if (!n) return true;
-          if (n.length > 30) return true;
-          // Must include at least one number and a '+' separator to indicate quantities and components
-          const hasNumber = /\d/.test(n);
-          const hasPlus = /\+/.test(n);
-          return !(hasNumber && hasPlus);
-        });
-        if (nameInvalid) {
-          throw new Error('AI returned names without quantities/+ separators. Retrying...');
-        }
-
-        // Prevent repetition: avoid duplicates among themselves or against recent history
-        const names = newSuggestions.map(m => (m.name || '').trim());
-        const internalDup = new Set(names).size !== names.length;
-        const historyDup = names.some(n => (recentNames || []).includes(n));
-        if (internalDup || historyDup) {
-          throw new Error('AI returned repeated names. Retrying for variety...');
-        }
-
-        // Debug: log parsed suggestions before setting state
-        try {
-          // eslint-disable-next-line no-console
-          console.log('Parsed meal suggestions:', newSuggestions);
-        } catch { }
-        setLastMealType(currentMealType);
-        setSuggestions(newSuggestions);
-        // Persist names to history to reduce repetition across sessions
-        try {
-          const updated = Array.from(new Set([...(recentNames || []), ...names])).slice(-30);
-          localStorage.setItem(historyKey, JSON.stringify(updated));
-        } catch { }
-      } catch (parseError) {
-        console.error('JSON Parse Error:', parseError);
-        console.error('Received text:', cleanJson);
-        throw new Error('Failed to parse meal suggestions');
+        const names = validatedSuggestions.map(m => (m.name || '').trim());
+        const updated = Array.from(new Set([...(recentNames || []), ...names])).slice(-30);
+        localStorage.setItem(historyKey, JSON.stringify(updated));
+      } catch (err) {
+        // Safe to ignore or handle silently
       }
     } catch (error) {
-      console.error('Error generating meal suggestions:', error);
+      setHasError(true);
       setSuggestions([]); // Clear suggestions on error
 
-      // Handle rate limit error
+      // Handle rate limit error or generic failures - don't retry automatically to avoid flooding
       if (error.toString().includes('429') || error.toString().includes('Too Many Requests')) {
-        const delay = Math.min(1000 * Math.pow(2, retryCount), 10000); // Exponential backoff up to 10 seconds
+        const delay = Math.min(2000 * Math.pow(2, retryCount), 10000);
         await new Promise(resolve => setTimeout(resolve, delay));
-        generateMealSuggestions(retryCount + 1);
-      } else if (retryCount < 3) {
-        // For other errors, retry with a delay
-        await new Promise(resolve => setTimeout(resolve, 1000));
-        generateMealSuggestions(retryCount + 1);
+        if (retryCount < 1) {
+          generateMealSuggestions(retryCount + 1);
+        }
       }
     } finally {
       setLoading(false);
@@ -931,7 +912,7 @@ Return EXACTLY 3 items in this JSON format (no extra text):
         updateLoadingStep('tutorial', 2, 'complete');
         recipeData.youtubeLink = youtubeSearchUrl;
       } catch (error) {
-        console.error('Error finding YouTube tutorial:', error);
+        // console.error('Error finding YouTube tutorial:', error);
         updateLoadingStep('tutorial', 0, 'error');
         updateLoadingStep('tutorial', 1, 'error');
         updateLoadingStep('tutorial', 2, 'error');
@@ -953,7 +934,6 @@ Return EXACTLY 3 items in this JSON format (no extra text):
       setDetailedRecipe(finalRecipeData);
 
     } catch (error) {
-      console.error('Error generating recipe details:', error);
       setDetailedRecipe(null);
       // Mark all remaining steps as error
       loadingSteps.forEach(step => {
@@ -978,7 +958,7 @@ Return EXACTLY 3 items in this JSON format (no extra text):
   // Check for updates every minute
   useEffect(() => {
     const checkForUpdates = () => {
-      if (shouldRefreshMeals() && !loading) {
+      if (shouldRefreshMeals() && !loading && !hasError) {
         generateMealSuggestions();
       }
     };
@@ -988,9 +968,9 @@ Return EXACTLY 3 items in this JSON format (no extra text):
 
     // Set up interval
     const interval = setInterval(checkForUpdates, 60000); // Check every minute
-
+    
     return () => clearInterval(interval);
-  }, [shouldRefreshMeals, loading]);
+  }, [shouldRefreshMeals, loading, user, user?.isPro, hasError]);
 
   useEffect(() => {
     if (loading) {
@@ -1139,7 +1119,11 @@ Return EXACTLY 3 items in this JSON format (no extra text):
             )}
             disabled={loading}
           >
-            <RefreshCw className={cn("h-5 w-5 text-white", loading && "animate-spin")} />
+            {loading ? (
+              <Loader size={20} className="h-5 w-5 text-white" />
+            ) : (
+              <RefreshCw className="h-5 w-5 text-white" />
+            )}
           </button>
         </ProFeatures>
       </div>
@@ -1475,6 +1459,7 @@ Return EXACTLY 3 items in this JSON format (no extra text):
                               src={detailedRecipe.image}
                               alt={selectedMeal.name}
                               className="w-full h-full object-cover"
+                              loading="lazy"
                             />
                             <div className="absolute inset-0 bg-gradient-to-t from-background/80 to-transparent" />
                           </motion.div>

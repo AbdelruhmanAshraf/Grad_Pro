@@ -1,18 +1,24 @@
 from __future__ import annotations
 
 import asyncio
+import time
+import uuid
 from contextlib import asynccontextmanager
+from threading import Lock
 from typing import Dict, List, Optional
 
-from fastapi import Depends, FastAPI, HTTPException, Query, status
+from fastapi import Depends, FastAPI, HTTPException, Query, Request, status
 from fastapi.middleware.cors import CORSMiddleware
+from starlette.responses import Response
 
 from .core.config import get_settings
+from .llm import router as llm_router
 from .schemas import (
     ClassificationResult,
     Exercise,
     FrameRequest,
     FrameResponse,
+    SecurityEventRequest,
     SessionEndRequest,
     SessionEndResponse,
     SessionStartRequest,
@@ -22,9 +28,11 @@ from .schemas import (
 )
 from .security import (
     FirebaseUser,
+    assert_frame_payload_size,
     assert_payload_size,
     firebase_user,
     rate_limit,
+    redact_uid,
 )
 from .services.classifier import (
     Classification,
@@ -39,6 +47,26 @@ from .services.sessions import SessionManager, SessionNotFoundError, WorkoutSess
 MODEL_VERSION = "22ex_bilstm_v1"
 
 settings = get_settings()
+
+
+# --------------------------------------------------------------------------- #
+# Active-session counter (session_max_active enforcement, without touching
+# services/sessions.py per hardening plan §7d).
+# --------------------------------------------------------------------------- #
+
+_active_sessions = 0
+_active_lock = Lock()
+
+
+def _bump_active(delta: int) -> None:
+    global _active_sessions
+    with _active_lock:
+        _active_sessions = max(0, _active_sessions + delta)
+
+
+def _active_count() -> int:
+    with _active_lock:
+        return _active_sessions
 
 
 @asynccontextmanager
@@ -66,7 +94,12 @@ async def _session_cleanup_loop() -> None:
                 max_age_s=settings.session_max_age_s,
             )
             if removed:
-                print(f"[sessions] cleanup evicted {removed} stale sessions", flush=True)
+                _bump_active(-removed)
+                print(
+                    f"[sessions] cleanup evicted {removed} stale sessions "
+                    f"(active={_active_count()})",
+                    flush=True,
+                )
         except asyncio.CancelledError:
             raise
         except Exception as exc:  # pragma: no cover
@@ -91,6 +124,40 @@ app.add_middleware(
     allow_headers=["Authorization", "Content-Type", "Accept"],
     max_age=600,
 )
+
+
+@app.middleware("http")
+async def request_log_middleware(request: Request, call_next):
+    """Structured request log: method, path, redacted uid, status, latency.
+
+    No bodies, no tokens. `request.state.uid` is set by `firebase_user` when
+    the request passes auth; unauth or pre-auth requests log uid=-.
+    """
+    start = time.monotonic()
+    rid = uuid.uuid4().hex[:8]
+    try:
+        response: Response = await call_next(request)
+    except Exception:
+        dur_ms = (time.monotonic() - start) * 1000
+        uid = getattr(request.state, "uid", None)
+        print(
+            f"[req {rid}] {request.method} {request.url.path} "
+            f"uid={redact_uid(uid)} status=EXC {dur_ms:.1f}ms",
+            flush=True,
+        )
+        raise
+    dur_ms = (time.monotonic() - start) * 1000
+    uid = getattr(request.state, "uid", None)
+    print(
+        f"[req {rid}] {request.method} {request.url.path} "
+        f"uid={redact_uid(uid)} status={response.status_code} {dur_ms:.1f}ms",
+        flush=True,
+    )
+    return response
+
+
+app.include_router(llm_router)
+
 
 pose_service = PoseService()
 classifier = ExerciseClassifier(
@@ -163,6 +230,7 @@ def _log_startup_state() -> None:
         f"  Model version:   {MODEL_VERSION}",
         f"  Exercises:       {', '.join(exercises) if exercises else '(none)'}",
         f"  CORS origins:    {', '.join(settings.cors_origins)}",
+        f"  Session cap:     {settings.session_max_active} active max",
     ]
     if classifier.load_error:
         lines.append(f"  Load error:      {classifier.load_error}")
@@ -175,9 +243,9 @@ def _log_startup_state() -> None:
 def health() -> Dict[str, object]:
     """Liveness and readiness probe (unauthenticated by design)."""
     classifier_loaded = classifier.is_ready
-    status = "healthy" if classifier_loaded else "degraded"
+    status_str = "healthy" if classifier_loaded else "degraded"
     response: Dict[str, object] = {
-        "status": status,
+        "status": status_str,
         "classifier_loaded": classifier_loaded,
         "model_version": MODEL_VERSION,
         "num_classes": len(classifier.exercise_classes),
@@ -216,6 +284,11 @@ def start_session(
     _size: None = Depends(assert_payload_size),
     user: FirebaseUser = Depends(rate_limit("session")),
 ) -> SessionStartResponse:
+    if _active_count() >= settings.session_max_active:
+        raise HTTPException(
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+            detail="Session capacity reached. Try again shortly.",
+        )
     session = session_manager.start(
         exercise=payload.exercise,
         sets=payload.sets,
@@ -223,6 +296,7 @@ def start_session(
         rest_timer=payload.rest_timer,
         owner_uid=user.uid,
     )
+    _bump_active(+1)
     return SessionStartResponse(
         session_id=session.session_id,
         metrics=_metrics_response(session),
@@ -233,7 +307,7 @@ def start_session(
 @app.post("/api/frame", response_model=FrameResponse)
 def process_frame(
     payload: FrameRequest,
-    _size: None = Depends(assert_payload_size),
+    _size: None = Depends(assert_frame_payload_size),
     user: FirebaseUser = Depends(rate_limit("frame")),
 ) -> FrameResponse:
     session = _get_session_or_404(payload.session_id)
@@ -309,7 +383,7 @@ def process_frame(
 
 @app.get("/api/session/status", response_model=SessionStatusResponse)
 def session_status(
-    session_id: str = Query(..., min_length=1),
+    session_id: str = Query(..., min_length=1, max_length=64),
     user: FirebaseUser = Depends(rate_limit("session")),
 ) -> SessionStatusResponse:
     session = _get_session_or_404(session_id)
@@ -334,8 +408,27 @@ def end_session(
     session = _get_session_or_404(payload.session_id)
     _assert_owner(session, user)
     session_manager.end(session.session_id)
+    _bump_active(-1)
     return SessionEndResponse(
         session_id=session.session_id,
         metrics=_metrics_response(session),
         duration_seconds=session_manager.duration_seconds(session),
     )
+
+
+@app.post("/api/security/event", status_code=204)
+async def security_event(
+    event: SecurityEventRequest,
+    user: FirebaseUser = Depends(rate_limit("security_event")),
+) -> Response:
+    """Client-reported security event (failed login, AI failure, rate-limit hit).
+
+    Body already sanitised on the client (see src/lib/securityLog.ts). Never
+    log tokens or keys — the `detail` field is capped at 200 chars.
+    """
+    detail = (event.detail or "")[:200]
+    print(
+        f"[sec] uid={redact_uid(user.uid)} type={event.type} detail={detail!r}",
+        flush=True,
+    )
+    return Response(status_code=204)

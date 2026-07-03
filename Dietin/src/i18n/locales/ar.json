@@ -406,7 +406,10 @@
   },
   "plusButton": {
     "workoutPlan": "خطة التمرين",
-    "mealLogging": "تسجيل الوجبة"
+    "mealLogging": "تسجيل الوجبة",
+    "hydration": "شرب الماء",
+    "burn": "حرق السعرات",
+    "addFood": "إضافة طعام"
   },
   "mealAnalysis": {
     "saveSuccess": "تم حفظ الوجبة بنجاح!",

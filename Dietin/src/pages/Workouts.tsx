@@ -3,9 +3,10 @@ import { createPortal } from 'react-dom';
 import { motion, AnimatePresence, useMotionValue } from 'framer-motion';
 import { useWorkoutStore } from '@/stores/workoutStore';
 import {
-  ChevronRight, X, Loader2,
-  ArrowLeft, RefreshCw, Info, Search, Heart, HeartOff, Dumbbell, ClipboardList, Plus, Activity, BarChart3
+  ChevronRight, X,
+  ArrowLeft, RefreshCw, Info, Search, Heart, HeartOff, Dumbbell, ClipboardList, Plus, Activity, BarChart3, LineChart
 } from 'lucide-react';
+import Loader from "@/components/Loader";
 import { Button } from '@/components/ui/button';
 import { Card, CardContent } from '@/components/ui/card';
 import { cn } from '@/lib/utils';
@@ -18,7 +19,7 @@ import {
 } from "@/components/ui/dialog";
 import { Input } from '@/components/ui/input';
 import ProFeatures from '@/components/ProFeatures';
-import { Link, useLocation } from 'react-router-dom';
+import { Link, useLocation, useSearchParams } from 'react-router-dom';
 import { AICoachPanel } from '@/features/ai-coach/AICoachPanel';
 import NavHide from "@/components/NavHide";
 import { useTranslation } from 'react-i18next';
@@ -137,7 +138,11 @@ const Workouts = () => {
   const searchRef = useRef<HTMLDivElement>(null);
   const location = useLocation();
   const y = useMotionValue(0);
-  const [activeTab, setActiveTab] = useState<'manual' | 'ai'>('manual');
+  const [searchParams, setSearchParams] = useSearchParams();
+  const activeTab = searchParams.get('tab') === 'ai' ? 'ai' : 'manual';
+  const setActiveTab = (tab: 'manual' | 'ai') => {
+    setSearchParams({ tab });
+  };
 
   // Helpers to normalize muscle keys (e.g., 'muscles.sub_muscles.lower_back' → 'lower back')
   const normalize = (value: string) => value.toLowerCase().replace(/_/g, ' ');
@@ -416,6 +421,12 @@ const Workouts = () => {
       document.body.style.position = '';
       document.body.style.width = '';
     }
+    return () => {
+      document.body.style.overflow = '';
+      document.body.style.touchAction = '';
+      document.body.style.position = '';
+      document.body.style.width = '';
+    };
   }, [showExerciseModal]);
 
   // Add useEffect to refilter when force type changes
@@ -436,69 +447,90 @@ const Workouts = () => {
     <div className="h-full">
       <NavHide isWorkoutStarted={showExerciseModal} />
 
-      <div className="h-full overflow-y-auto">
+      <div className="h-full overflow-y-auto -webkit-overflow-scrolling-touch">
         <div className="container mx-auto space-y-8 p-6 pb-24 max-w-[1920px]">
           {/* Header */}
-          <div className="flex flex-col gap-3">
-            <motion.h1
-              initial={{ opacity: 0 }}
-              animate={{ opacity: 1 }}
-              transition={{ duration: 0.8, delay: 0.2 }}
-              className="text-[1.75rem] tracking-tight text-black font-sf-display font-sf-bold"
-            >
-              {t("workouts.exercise_library")}
-            </motion.h1>
+          {activeTab === 'manual' && (
+            <div className="flex flex-col gap-3">
+              <motion.h1
+                initial={{ opacity: 0 }}
+                animate={{ opacity: 1 }}
+                transition={{ duration: 0.8, delay: 0.2 }}
+                className="text-[1.75rem] tracking-tight text-black font-sf-display font-sf-bold"
+              >
+                {t("workouts.exercise_library")}
+              </motion.h1>
 
-            <div className="flex justify-center w-full -mt-1">
-              <div className="bg-gray-100 rounded-full p-1 flex items-center shadow-md border border-gray-200/50">
-                <Link
-                  to="/plan"
-                  className="px-5 py-2 rounded-full flex items-center gap-2.5 transition-all duration-200 hover:bg-white/70"
-                >
-                  <span className="text-sm font-medium text-gray-600">{t("plan.plan")}</span>
-                  <ClipboardList className="w-4 h-4 text-gray-600" />
-                </Link>
-                <Link
-                  to="/workouts"
-                  className="px-5 py-2 rounded-full bg-white shadow-sm flex items-center gap-2.5 transition-all duration-200 border border-gray-100"
-                >
-                  <span className="text-sm font-medium text-gray-900">{t("workouts.library")}</span>
-                  <Dumbbell className="w-4 h-4 text-primary" />
-                </Link>
+              <div className="flex justify-center w-full -mt-1">
+                <div className="bg-gray-100 rounded-full p-1 flex items-center shadow-md border border-gray-200/50">
+                  <Link
+                    to="/plan"
+                    className="px-5 py-2 rounded-full flex items-center gap-2.5 transition-all duration-200 hover:bg-white/70"
+                  >
+                    <span className="text-sm font-medium text-gray-600">{t("plan.plan")}</span>
+                    <ClipboardList className="w-4 h-4 text-gray-600" />
+                  </Link>
+                  <Link
+                    to="/workouts"
+                    className="px-5 py-2 rounded-full bg-white shadow-sm flex items-center gap-2.5 transition-all duration-200 border border-gray-100"
+                  >
+                    <span className="text-sm font-medium text-gray-900">{t("workouts.library")}</span>
+                    <Dumbbell className="w-4 h-4 text-primary" />
+                  </Link>
+                  <Link
+                    to="/progress"
+                    className="px-5 py-2 rounded-full flex items-center gap-2.5 transition-all duration-200 hover:bg-white/70"
+                  >
+                    <span className="text-sm font-medium text-gray-600">{t("plan.progress")}</span>
+                    <LineChart className="w-4 h-4 text-gray-600" />
+                  </Link>
+                </div>
+              </div>
+
+              {/* Segmentation Tabs */}
+              <div className="flex justify-center mt-2 w-full">
+                <div className="bg-gray-100 p-1 rounded-full flex gap-1 shadow-sm w-full max-w-sm">
+                  <button
+                    onClick={() => setActiveTab('manual')}
+                    className={cn(
+                      "flex-1 py-2 text-sm font-medium rounded-full transition-all duration-200",
+                      "bg-white text-black shadow-sm"
+                    )}
+                  >
+                    {t("workouts.manualTracking", { defaultValue: "Manual Tracking" })}
+                  </button>
+                  <button
+                    onClick={() => setActiveTab('ai')}
+                    className={cn(
+                      "flex-1 py-2 text-sm font-medium rounded-full transition-all duration-200 flex items-center justify-center gap-2",
+                      "text-gray-500 hover:text-gray-700"
+                    )}
+                  >
+                    {t("workouts.aiTracking", { defaultValue: "AI Tracking" })}
+                  </button>
+                </div>
               </div>
             </div>
-
-            {/* Segmentation Tabs */}
-            <div className="flex justify-center mt-2 w-full">
-              <div className="bg-gray-100 p-1 rounded-full flex gap-1 shadow-sm w-full max-w-sm">
-                <button
-                  onClick={() => setActiveTab('manual')}
-                  className={cn(
-                    "flex-1 py-2 text-sm font-medium rounded-full transition-all duration-200",
-                    activeTab === 'manual' ? "bg-white text-black shadow-sm" : "text-gray-500 hover:text-gray-700"
-                  )}
-                >
-                  {t("workouts.manualTracking", { defaultValue: "Manual Tracking" })}
-                </button>
-                <button
-                  onClick={() => setActiveTab('ai')}
-                  className={cn(
-                    "flex-1 py-2 text-sm font-medium rounded-full transition-all duration-200 flex items-center justify-center gap-2",
-                    activeTab === 'ai' ? "bg-white text-black shadow-sm" : "text-gray-500 hover:text-gray-700"
-                  )}
-                >
-                  {t("workouts.aiTracking", { defaultValue: "AI Tracking" })}
-                </button>
-              </div>
-            </div>
-          </div>
+          )}
 
           {activeTab === 'ai' ? (
             <motion.div
               initial={{ opacity: 0, y: 10 }}
               animate={{ opacity: 1, y: 0 }}
               exit={{ opacity: 0, y: -10 }}
+              className="space-y-4"
             >
+              <div className="flex items-center gap-3">
+                <button 
+                  onClick={() => setActiveTab('manual')}
+                  className="p-2 -ml-2 rounded-full hover:bg-black/5 dark:hover:bg-white/10 transition-colors"
+                >
+                  <ArrowLeft className="w-5 h-5 text-gray-700 dark:text-gray-300" />
+                </button>
+                <h1 className="text-xl font-bold text-gray-900 dark:text-white">
+                  {t("workouts.aiTracking", { defaultValue: "AI Tracking" })}
+                </h1>
+              </div>
               <AICoachPanel />
             </motion.div>
           ) : (
@@ -717,7 +749,7 @@ const Workouts = () => {
                         className="flex items-center justify-center py-12"
                       >
                         <div className="flex items-center gap-3 text-white/60">
-                          <RefreshCw className="w-5 h-5 animate-spin" />
+                          <Loader size={20} className="w-5 h-5 text-white" />
                           <span>{t("workouts.loading_exercises")}...</span>
                         </div>
                       </motion.div>
@@ -1012,6 +1044,7 @@ const Workouts = () => {
                                 src={image}
                                 alt={`${selectedExercise.name} - ${index === 0 ? 'Start' : 'End'} position`}
                                 className="w-full h-full object-contain rounded-xl"
+                                loading="lazy"
                               />
                             </div>
                           ))}

@@ -62,8 +62,8 @@ const NameValidationAI = ({ name, onValidation }: NameValidationAIProps) => {
         onValidation(Boolean(validation?.isValid));
       } catch (error) {
         console.error('Error validating name:', error);
-        setError(null);
-        onValidation(true); // Fail open on error
+        setError('Could not validate name — please try again');
+        onValidation(false); // Fail closed on error (was fail-open bypass)
       } finally {
         setIsValidating(false);
       }

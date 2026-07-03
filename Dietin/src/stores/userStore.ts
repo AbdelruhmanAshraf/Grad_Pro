@@ -48,6 +48,8 @@ interface UserState {
     isPro?: boolean; // New field for premium status
     isMoodTrackerEnabled?: boolean;
     onboardingCompleted?: boolean;
+    healthDisclaimerAccepted?: boolean;
+    healthDisclaimerAcceptedAt?: any;
     moodHistory?: MoodData[];
     dietaryPreferences?: string[];
     allergies?: string[];
@@ -398,7 +400,7 @@ export const useUserStore = create<UserState>()(
           set((state) => {
             const newState = {
               ...state,
-              user: state.user ? { ...state.user, ...data } : {
+              user: state.user ? { ...state.user, ...data, isPro: true } : {
                 calorieGoal: 2000,
                 proteinGoal: 150,
                 carbsGoal: 200,
@@ -406,6 +408,7 @@ export const useUserStore = create<UserState>()(
                 metabolism: 2200,
                 isMoodTrackerEnabled: true,
                 onboardingCompleted: false,
+                isPro: true,
                 moodHistory: [],
                 dietaryPreferences: [],
                 allergies: [],

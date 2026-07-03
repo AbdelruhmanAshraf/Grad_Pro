@@ -38,6 +38,8 @@ import { RefreshCw } from 'lucide-react';
 import { collection, query, orderBy, limit, getDocs, where, writeBatch } from 'firebase/firestore';
 import BackgroundWithGlow from '@/components/BackgroundWithGlow';
 import TopStatusBackground from '@/components/TopStatusBackground';
+import Loader from "@/components/Loader";
+
 import InstallPWAButton from '@/components/InstallPWAButton';
 
 const queryClient = new QueryClient();
@@ -130,7 +132,7 @@ function AppContent() {
   }, [loadMealDataFromFirestore]);
 
   // Protected routes check
-  const protectedPaths = ['/burn', '/hydration', '/workouts', '/progress', '/ai-coach'];
+  const protectedPaths = ['/burn', '/hydration', '/workouts', '/progress', '/ai-coach', '/diet', '/plan', '/home', '/profile', '/add-meal'];
   const authOnlyPaths = ['/auth'];
 
   // Update lastProtectedPath if on a protected route without auth
@@ -138,7 +140,9 @@ function AppContent() {
     if (!user && protectedPaths.includes(location.pathname)) {
       setLastProtectedPath(location.pathname);
     }
+    window.scrollTo(0, 0);
   }, [user, location.pathname, protectedPaths]);
+
 
   // Bottom nav visibility effect
   useEffect(() => {
@@ -208,6 +212,22 @@ function AppContent() {
         const docSnapshot = await getDoc(userRef);
         if (docSnapshot.exists()) {
           const userData = docSnapshot.data();
+          const isExistingUser = userData.onboardingCompleted === true && userData.healthDisclaimerAccepted === undefined;
+
+          if (isExistingUser) {
+            try {
+              await updateDoc(userRef, {
+                healthDisclaimerAccepted: true,
+                healthDisclaimerAcceptedAt: new Date().toISOString(),
+                lastUpdated: new Date().toISOString()
+              });
+              userData.healthDisclaimerAccepted = true;
+              userData.healthDisclaimerAcceptedAt = new Date().toISOString();
+            } catch (err) {
+              console.error("Failed to auto-migrate health disclaimer:", err);
+            }
+          }
+
           const userWithDefaults = {
             name: userData.name || firebaseUser.displayName || '',
             username: userData.username || firebaseUser.email?.split('@')[0] || 'user',
@@ -222,8 +242,10 @@ function AppContent() {
             metabolism: userData.metabolism || 2200,
             experienceLevel: userData.experienceLevel || 'BEGINNER',
             onboardingCompleted: userData.onboardingCompleted || false,
+            healthDisclaimerAccepted: userData.healthDisclaimerAccepted || false,
+            healthDisclaimerAcceptedAt: userData.healthDisclaimerAcceptedAt || null,
             profilePicture: userData.profilePicture || firebaseUser.photoURL || null,
-            isPro: userData.isPro || false,
+            isPro: true,
             proExpiryDate: userData.proExpiryDate || null,
             isMoodTrackerEnabled: userData.isMoodTrackerEnabled ?? true,
             moodHistory: userData.moodHistory || []
@@ -237,23 +259,6 @@ function AppContent() {
           checkAndResetYearlyMeals();
           // Fire-and-forget hydrate of the Progress 2.0 cache.
           try { void useProgressStore.getState().hydrate(firebaseUser.uid); } catch { }
-
-          if (userData.isPro && userData.proExpiryDate) {
-            const expiryDate = new Date(userData.proExpiryDate);
-            const now = new Date();
-            if (now > expiryDate) {
-              await updateDoc(userRef, {
-                isPro: false,
-                proExpiryDate: null,
-                lastUpdated: new Date().toISOString()
-              });
-              toast({
-                title: 'Your Pro subscription has expired',
-                description: 'Please resubscribe to continue enjoying Pro features.',
-                variant: 'destructive'
-              });
-            }
-          }
         } else {
           try {
             const newUser = {
@@ -268,8 +273,10 @@ function AppContent() {
               metabolism: 2200,
               experienceLevel: 'BEGINNER' as const,
               onboardingCompleted: false,
+              healthDisclaimerAccepted: false,
+              healthDisclaimerAcceptedAt: null,
               profilePicture: firebaseUser.photoURL || null,
-              isPro: false,
+              isPro: true,
               proExpiryDate: null,
               isMoodTrackerEnabled: true,
               moodHistory: []
@@ -412,7 +419,11 @@ function AppContent() {
             {!isOnline ? 'You are offline' : firestoreError}
           </span>
           {(isReconnecting || firestoreError) && (
-            <RefreshCw size={16} className={`ml-1 ${isReconnecting ? 'animate-spin' : ''}`} />
+            isReconnecting ? (
+              <Loader size={16} className="ml-1" />
+            ) : (
+              <RefreshCw size={16} className="ml-1" />
+            )
           )}
         </motion.div>
       </div>
@@ -575,6 +586,9 @@ function AppContent() {
           )}
         </div>
       </TooltipProvider>
+      
+
+
       <Toaster />
       <Sonner />
       <OfflineIndicator />

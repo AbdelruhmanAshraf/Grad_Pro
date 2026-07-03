@@ -1,5 +1,6 @@
 import { motion, AnimatePresence, PanInfo, useMotionValue, useTransform } from "framer-motion";
-import { X, ChevronRight, User, Bell, Palette, Globe, LifeBuoy, ChevronLeft, Camera, Pencil, Trash2, Heart, LogOut, Smile, Lock, Loader2, Check, Sparkles, Clock, FileText, Fingerprint, Smartphone, AlertTriangle, Copy, Mail } from "lucide-react";
+import { X, ChevronRight, User, Bell, Palette, Globe, LifeBuoy, ChevronLeft, Camera, Pencil, Trash2, Heart, LogOut, Smile, Lock, Check, Sparkles, Clock, FileText, Fingerprint, Smartphone, AlertTriangle, Copy, Mail } from "lucide-react";
+import Loader from "./Loader";
 import { useUserStore } from "@/stores/userStore";
 import { useState, useRef, useEffect } from 'react';
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
@@ -10,8 +11,9 @@ import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
 import { useNavigate } from 'react-router-dom';
 import { doc, updateDoc, getDoc, onSnapshot, deleteDoc, collection, getDocs } from "firebase/firestore";
-import { auth, db } from "@/lib/firebase";
+import { auth, db, functions } from "@/lib/firebase";
 import { signOut, sendPasswordResetEmail, updateEmail, EmailAuthProvider, reauthenticateWithCredential, deleteUser } from "firebase/auth";
+import { httpsCallable } from "firebase/functions";
 import { toast } from "sonner";
 import NavHide from './NavHide';
 import { Select, SelectTrigger, SelectValue, SelectContent, SelectItem } from "@/components/ui/select";
@@ -174,29 +176,23 @@ export const SettingsPanel = ({ isOpen, onClose, initialView = 'main' }: Setting
       const confirmDelete = window.confirm(t('settingsPanel.deleteAccount.confirm'));
       if (!confirmDelete) return;
 
-      const uid = userAuth.uid;
-      // Delete primary user doc
-      try { await deleteDoc(doc(db, 'users', uid)); } catch {}
-      // Attempt to purge some common subcollections
-      const possibleSubs = ['measurements', 'workouts', 'meals', 'notes'];
-      for (const sub of possibleSubs) {
-        try {
-          const colRef = collection(db, 'users', uid, sub);
-          const colSnap = await getDocs(colRef);
-          const deletions = colSnap.docs.map(d => deleteDoc(doc(db, 'users', uid, sub, d.id)));
-          await Promise.all(deletions);
-        } catch {}
-      }
-
-      // Delete auth user
-      await deleteUser(userAuth);
+      // Server-side purge: recursive Firestore delete (users/{uid} + all
+      // subcollections), Storage prefixes (users, mealImages, progressPhotos,
+      // profilePictures), subscription rows, and the Auth user. Client cannot
+      // do this on its own because Storage prefixes and unknown subcollections
+      // aren't reachable with security-rule-scoped credentials.
+      const call = httpsCallable<Record<string, never>, { deleted: boolean }>(
+        functions,
+        'delete_my_account',
+      );
+      await call({});
 
       toast.success(t('settingsPanel.messages.accountDeleted'));
       resetUser();
       onClose();
     } catch (err: any) {
       console.error(err);
-      if (err?.code === 'auth/requires-recent-login') {
+      if (err?.code === 'functions/unauthenticated' || err?.code === 'auth/requires-recent-login') {
         toast.error(t('settingsPanel.errors.reauthToDelete'));
       } else {
         toast.error(t('settingsPanel.errors.failedToDeleteAccount'));
@@ -1183,7 +1179,7 @@ export const SettingsPanel = ({ isOpen, onClose, initialView = 'main' }: Setting
                             >
                               {isLoading ? (
                                 <div className="flex items-center gap-2">
-                                  <Loader2 className="w-4 h-4 animate-spin" />
+                                  <Loader size={16} />
                                   {t('settingsPanel.personal.actions.saving')}
                                 </div>
                               ) : (
