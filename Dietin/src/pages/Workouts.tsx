@@ -21,6 +21,8 @@ import { Input } from '@/components/ui/input';
 import ProFeatures from '@/components/ProFeatures';
 import { Link, useLocation, useSearchParams } from 'react-router-dom';
 import { AICoachPanel } from '@/features/ai-coach/AICoachPanel';
+import { AIAgentCore } from '@/lib/ai/agent/core';
+import { buildWorkoutAssistantRequest } from '@/lib/ai/agent/branches/workoutAssistant';
 import NavHide from "@/components/NavHide";
 import { useTranslation } from 'react-i18next';
 
@@ -532,6 +534,32 @@ const Workouts = () => {
                 </h1>
               </div>
               <AICoachPanel />
+
+              {/* Workout Assistant AI button */}
+              <div className="mt-4 p-4 rounded-2xl bg-white border border-gray-200 shadow-sm">
+                <h2 className="text-lg font-semibold text-gray-900 mb-2">
+                  Workout Assistant
+                </h2>
+                <p className="text-sm text-gray-500 mb-3">
+                  Ask questions about exercise form, technique, or which muscles to target.
+                </p>
+                <Button
+                  variant="outline"
+                  className="w-full flex items-center gap-2"
+                  onClick={async () => {
+                    const input = prompt('What would you like to know about your workout?');
+                    if (!input) return;
+                    const agent = new AIAgentCore();
+                    const result = await agent.process(buildWorkoutAssistantRequest(input));
+                    if (result.response) {
+                      alert(result.response);
+                    }
+                  }}
+                >
+                  <Sparkles className="w-4 h-4" />
+                  Ask Workout Assistant
+                </Button>
+              </div>
             </motion.div>
           ) : (
             <motion.div

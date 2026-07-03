@@ -5,6 +5,9 @@ import { useWorkoutStore } from '@/stores/workoutStore';
 import { useProgressStore } from '@/stores/progressStore';
 import { AICoachPanel } from '@/features/ai-coach/AICoachPanel';
 import { isAiConfigured } from '@/lib/aiCoachApi';
+import { AIAgentCore } from '@/lib/ai/agent/core';
+import { buildWorkoutPlanRequest } from '@/lib/ai/agent/branches/workoutPlan';
+import { buildCustomWorkoutPlanRequest } from '@/lib/ai/agent/branches/customWorkoutPlan';
 import { Sparkles } from 'lucide-react';
 import { useTranslation } from 'react-i18next';
 import { 
@@ -1754,6 +1757,71 @@ const Plan = () => {
                         <span className="text-sm font-medium">{t('plan.create_plan')}</span>
                       </div>
                     </div>
+                  </div>
+
+                  {/* AI Workout Plan Buttons */}
+                  <div className="grid grid-cols-2 gap-4 mt-4">
+                    <motion.button
+                      whileHover={{ scale: 1.02 }}
+                      whileTap={{ scale: 0.98 }}
+                      onClick={async () => {
+                        const input = prompt('Describe your goal (e.g., "Build muscle in 4 weeks" or "Strength training 3 days a week"):');
+                        if (!input) return;
+                        const agent = new AIAgentCore();
+                        const result = await agent.process(buildWorkoutPlanRequest(input));
+                        if (result.response) {
+                          alert(result.response);
+                        }
+                      }}
+                      className="relative h-[140px] rounded-3xl overflow-hidden bg-gradient-to-br from-blue-500/10 to-indigo-500/10 border border-blue-200/50"
+                    >
+                      <div className="h-full p-5 flex flex-col justify-between">
+                        <div>
+                          <h3 className="text-lg font-bold text-blue-700 mb-1">Create Workout Plan</h3>
+                          <p className="text-xs text-blue-600/70">Generate a full plan with AI</p>
+                        </div>
+                        <div className="flex items-center gap-2 text-blue-600">
+                          <Sparkles className="w-5 h-5" />
+                          <span className="text-sm font-medium">Ask AI</span>
+                        </div>
+                      </div>
+                    </motion.button>
+
+                    <motion.button
+                      whileHover={{ scale: 1.02 }}
+                      whileTap={{ scale: 0.98 }}
+                      onClick={async () => {
+                        const input = prompt('Describe your goals, fitness level, and available equipment:') + '';
+                        const goalsStr = prompt('Primary goals (e.g., strength, hypertrophy, endurance):');
+                        const fitLevel = prompt('Fitness level (beginner, intermediate, advanced):');
+                        const equipStr = prompt('Available equipment (comma-separated):');
+                        if (!input) return;
+                        const agent = new AIAgentCore();
+                        const result = await agent.process(
+                          buildCustomWorkoutPlanRequest(
+                            input,
+                            goalsStr?.split(',').map(g => g.trim()) || [],
+                            fitLevel || undefined,
+                            equipStr?.split(',').map(e => e.trim()) || []
+                          )
+                        );
+                        if (result.response) {
+                          alert(result.response);
+                        }
+                      }}
+                      className="relative h-[140px] rounded-3xl overflow-hidden bg-gradient-to-br from-purple-500/10 to-pink-500/10 border border-purple-200/50"
+                    >
+                      <div className="h-full p-5 flex flex-col justify-between">
+                        <div>
+                          <h3 className="text-lg font-bold text-purple-700 mb-1">Custom Workout Plan</h3>
+                          <p className="text-xs text-purple-600/70">Tailored to your preferences</p>
+                        </div>
+                        <div className="flex items-center gap-2 text-purple-600">
+                          <Sparkles className="w-5 h-5" />
+                          <span className="text-sm font-medium">Ask AI</span>
+                        </div>
+                      </div>
+                    </motion.button>
                   </div>
                 </div>
 
