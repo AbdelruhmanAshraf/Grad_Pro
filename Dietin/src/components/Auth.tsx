@@ -778,7 +778,7 @@ export const Auth = () => {
 
                       {/* Hardcoded Test Account Button */}
                       <button
-                        onClick={() => handleEmailLogin('abderuhamanelfekky@gmail.com', 'abdo12345')}
+                        onClick={() => handleEmailLogin('testuser@example.com', 'Password123!')}
                         disabled={isLoading}
                         className="w-full bg-gray-100 text-gray-800 rounded-full py-3.5 px-5 flex items-center justify-center gap-3 transition-all duration-200 hover:bg-gray-200 shadow-sm mt-5"
                       >

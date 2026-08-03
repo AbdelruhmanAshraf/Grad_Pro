@@ -7,12 +7,12 @@ importScripts('https://www.gstatic.com/firebasejs/10.12.2/firebase-messaging-com
 // below is public (it identifies the project — security is enforced by
 // Firestore/Storage rules, not by hiding this config).
 firebase.initializeApp({
-  apiKey: "AIzaSyDnGBI6E-unDQ4zDMfHf9qgwMoci6p9e3Q",
-  authDomain: "dietin-web.firebaseapp.com",
-  projectId: "dietin-web",
-  storageBucket: "dietin-web.firebasestorage.app",
-  messagingSenderId: "139206279964",
-  appId: "1:139206279964:web:60f018e3ede4c0abaeb0d9"
+  apiKey: "YOUR_FIREBASE_API_KEY",
+  authDomain: "YOUR_FIREBASE_AUTH_DOMAIN",
+  projectId: "YOUR_FIREBASE_PROJECT_ID",
+  storageBucket: "YOUR_FIREBASE_STORAGE_BUCKET",
+  messagingSenderId: "YOUR_FIREBASE_MESSAGING_SENDER_ID",
+  appId: "YOUR_FIREBASE_APP_ID"
 })
 
 const messaging = firebase.messaging()

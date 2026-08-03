@@ -12,7 +12,7 @@ venv/
 ai/dataset/
 dataset/
 datasets/
-data/
+/data/
 
 # Datasets
 Dietin/ai/dataset/

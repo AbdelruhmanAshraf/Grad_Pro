@@ -16,9 +16,9 @@ admin.initializeApp({
     credential: admin.credential.cert(serviceAccount)
 });
 
-const email = 'abderuhamanelfekky@gmail.com';
-const password = 'abdo12345';
-const displayName = 'Abderuhaman Elfekky';
+const email = 'testuser@example.com';
+const password = 'Password123!';
+const displayName = 'Test User';
 
 async function createTestUser() {
     try {
